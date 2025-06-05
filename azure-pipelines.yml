@@ -47,7 +47,7 @@ stages:
       displayName: 'Restore Dependencies'
 
     - script: >
-        dotnet build ./src/Infragistics.QueryBuilder.Executor.csproj
+        dotnet build ./Infragistics.QueryBuilder.Executor.csproj
         --configuration $(buildConfiguration)
         --no-restore
         -p:SignAssembly=true
@@ -56,7 +56,7 @@ stages:
       displayName: 'Build and Sign Assemblies'
 
     - script: >
-        dotnet pack ./src/Infragistics.QueryBuilder.Executor.csproj
+        dotnet pack ./Infragistics.QueryBuilder.Executor.csproj
         --configuration $(buildConfiguration)
         --no-build
         -p:SignAssembly=true
