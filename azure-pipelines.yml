@@ -26,7 +26,7 @@ stages:
     - task: UseDotNet@2
       inputs:
         packageType: 'sdk'
-        version: '9.x'
+        versionSpec: '9.x'
 
     - checkout: self
       persistCredentials: true
