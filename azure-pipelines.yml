@@ -41,7 +41,7 @@ stages:
     - task: DownloadSecureFile@1
       name: cert
       inputs:
-        secureFile: 'code-signing-certificate-2023-2026.pfx'
+        secureFile: 'IGStrongName.key'
 
     - script: dotnet restore
       displayName: 'Restore Dependencies'
