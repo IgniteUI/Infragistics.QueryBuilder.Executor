@@ -51,7 +51,7 @@ stages:
         --configuration $(buildConfiguration)
         --no-restore
         -p:SignAssembly=true
-        -p:AssemblyOriginatorKeyFile=$(Agent.TempDirectory)/$(cert.secureFilePath)
+        -p:AssemblyOriginatorKeyFile=$(cert.secureFilePath)
         -p:PrivateKeyPassword=$(SigningCertificatePassword)
       displayName: 'Build and Sign Assemblies'
 
@@ -60,7 +60,7 @@ stages:
         --configuration $(buildConfiguration)
         --no-build
         -p:SignAssembly=true
-        -p:AssemblyOriginatorKeyFile=$(Agent.TempDirectory)/$(cert.secureFilePath)
+        -p:AssemblyOriginatorKeyFile=$(cert.secureFilePath)
         -p:PrivateKeyPassword=$(SigningCertificatePassword)
         -p:PackageVersion=$(GitVersion.NuGetVersionV2)
         -o $(Build.ArtifactStagingDirectory)/nuget
