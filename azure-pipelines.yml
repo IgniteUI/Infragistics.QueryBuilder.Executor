@@ -26,7 +26,7 @@ stages:
     - task: UseDotNet@2
       inputs:
         packageType: 'sdk'
-        versionSpec: '9.x'
+        versionSpec: '5.x'
 
     - checkout: self
       persistCredentials: true
@@ -34,7 +34,7 @@ stages:
     - task: GitVersion@5
       inputs:
         runtime: 'core'
-        versionSpec: '9.x'
+        versionSpec: '5.x'
       name: gitVersion
 
     - task: DownloadSecureFile@1
