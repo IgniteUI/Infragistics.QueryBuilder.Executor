@@ -30,6 +30,7 @@ stages:
 
     - checkout: self
       persistCredentials: true
+      fetchDepth: 0
 
     - task: GitVersion@5
       inputs:
