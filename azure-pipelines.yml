@@ -20,7 +20,7 @@ variables:
 stages:
 - stage: BuildAndPublish
   condition: succeeded()
-  jobs:
+  jobs: 
   - job: BuildAndSign
     pool:
       vmImage: 'windows-latest'
@@ -47,7 +47,27 @@ stages:
     - task: DownloadSecureFile@1
       name: cert
       inputs:
-        secureFile: 'IGStrongName.key'
+        secureFile: 'code-signing-certificate-2023-2026.pfx'
+
+    - powershell: |
+        $certPath = '$(cert.secureFilePath)'
+        $certPassword = '$(SigningCertificatePassword)'
+
+        $dllFolder = '$(Build.ArtifactStagingDirectory)\path\to\dlls'
+
+        $dllFiles = Get-ChildItem -Path $dllFolder -Filter *.dll -Recurse
+        $signtoolPath = "${env:ProgramFiles(x86)}\Windows Kits\10\bin\x64\signtool.exe"
+
+        foreach ($dll in $dllFiles) {
+          Write-Host "Signing $($dll.FullName)..."
+          & $signtoolPath sign /f $certPath /p $certPassword /tr http://timestamp.digicert.com /td sha256 /fd sha256 $dll.FullName
+
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "Signing failed for $($dll.FullName)"
+            exit 1
+          }
+        }
+      displayName: 'Sign all DLL files with PFX certificate'
 
     - script: dotnet restore
       displayName: 'Restore Dependencies'
