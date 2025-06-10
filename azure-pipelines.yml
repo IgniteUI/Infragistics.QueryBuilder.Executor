@@ -58,8 +58,8 @@ stages:
     #     --no-restore
     #   displayName: 'Build Project'
     
-    - script: |
-        echo "Building project and forcing output path..."
+    - powershell: |
+        Write-Host "Building project and forcing output path..."
         dotnet build ./Infragistics.QueryBuilder.Executor.csproj `
           --configuration $(buildConfiguration) `
           --no-restore `
