@@ -49,11 +49,27 @@ stages:
       inputs:
         secureFile: 'code-signing-certificate-2023-2026.pfx'
 
+    - script: dotnet restore
+      displayName: 'Restore Dependencies'
+
+    - script: >
+        dotnet build ./Infragistics.QueryBuilder.Executor.csproj
+        --configuration $(buildConfiguration)
+        --no-restore
+      displayName: 'Build Project'
+
     - powershell: |
         $certPath = '$(cert.secureFilePath)'
         $certPassword = '$(SigningCertificatePassword)'
 
-        $dllFolder = '$(Build.ArtifactStagingDirectory)\path\to\dlls'
+        # Path to DLL output folder after build
+        $dllFolder = '$(Build.SourcesDirectory)\Infragistics.QueryBuilder.Executor\bin\$(buildConfiguration)\net5.0'
+
+        Write-Host "Signing DLLs in folder: $dllFolder"
+        if (-Not (Test-Path $dllFolder)) {
+            Write-Error "Folder does not exist: $dllFolder"
+            exit 1
+        }
 
         $dllFiles = Get-ChildItem -Path $dllFolder -Filter *.dll -Recurse
         $signtoolPath = "${env:ProgramFiles(x86)}\Windows Kits\10\bin\x64\signtool.exe"
@@ -68,18 +84,6 @@ stages:
           }
         }
       displayName: 'Sign all DLL files with PFX certificate'
-
-    - script: dotnet restore
-      displayName: 'Restore Dependencies'
-
-    - script: >
-        dotnet build ./Infragistics.QueryBuilder.Executor.csproj
-        --configuration $(buildConfiguration)
-        --no-restore
-        -p:SignAssembly=true
-        -p:AssemblyOriginatorKeyFile=$(cert.secureFilePath)
-        -p:PrivateKeyPassword=$(SigningCertificatePassword)
-      displayName: 'Build and Sign Assemblies'
 
     - script: >
         dotnet pack ./Infragistics.QueryBuilder.Executor.csproj
