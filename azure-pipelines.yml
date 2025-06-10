@@ -59,6 +59,14 @@ stages:
       displayName: 'Build Project'
 
     - powershell: |
+        Write-Host "Listing build output folders:"
+        Get-ChildItem "$(Build.SourcesDirectory)\Infragistics.QueryBuilder.Executor\bin\$(buildConfiguration)" -Directory | ForEach-Object { Write-Host $_.FullName }
+        
+        Write-Host "Checking inside each target folder:"
+        Get-ChildItem "$(Build.SourcesDirectory)\Infragistics.QueryBuilder.Executor\bin\$(buildConfiguration)" -Recurse -Include *.dll
+      displayName: 'Debug: List build output contents'
+
+    - powershell: |
         $certPath = '$(cert.secureFilePath)'
         $certPassword = '$(SigningCertificatePassword)'
 
