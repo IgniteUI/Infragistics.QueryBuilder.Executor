@@ -10,6 +10,10 @@ pr:
 
 variables:
 - group: Code_Signing_Certificate_2023_2026
+- name: prId
+  value: $[coalesce(variables['System.PullRequest.PullRequestId'], '000')]
+- name: prIteration
+  value: $[counter(variables['prId'], 1)]
 
 stages:
 - stage: BuildAndPublish
