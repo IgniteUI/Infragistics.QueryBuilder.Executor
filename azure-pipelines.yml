@@ -52,11 +52,19 @@ stages:
     - script: dotnet restore
       displayName: 'Restore Dependencies'
 
-    - script: >
-        dotnet build ./Infragistics.QueryBuilder.Executor.csproj
-        --configuration $(buildConfiguration)
-        --no-restore
-      displayName: 'Build Project'
+    # - script: >
+    #     dotnet build ./Infragistics.QueryBuilder.Executor.csproj
+    #     --configuration $(buildConfiguration)
+    #     --no-restore
+    #   displayName: 'Build Project'
+    
+    - script: |
+        echo "Building project and forcing output path..."
+        dotnet build ./Infragistics.QueryBuilder.Executor.csproj `
+          --configuration $(buildConfiguration) `
+          --no-restore `
+          -o $(Build.ArtifactStagingDirectory)\executor-build
+      displayName: 'Build Project with Output Directory'
 
     - powershell: |
         $outputDir = "$(Build.ArtifactStagingDirectory)\executor-build"
@@ -75,9 +83,7 @@ stages:
     - powershell: |
         $certPath = '$(cert.secureFilePath)'
         $certPassword = '$(SigningCertificatePassword)'
-
-        # Path to DLL output folder after build
-        $dllFolder = '$(Build.SourcesDirectory)\Infragistics.QueryBuilder.Executor\bin\$(buildConfiguration)\net5.0'
+        $dllFolder = "$(Build.ArtifactStagingDirectory)\executor-build"
 
         Write-Host "Signing DLLs in folder: $dllFolder"
         if (-Not (Test-Path $dllFolder)) {
