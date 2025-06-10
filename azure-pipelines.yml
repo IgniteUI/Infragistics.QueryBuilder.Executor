@@ -59,11 +59,17 @@ stages:
       displayName: 'Build Project'
 
     - powershell: |
-        Write-Host "Listing build output folders:"
-        Get-ChildItem "$(Build.SourcesDirectory)\Infragistics.QueryBuilder.Executor\bin\$(buildConfiguration)" -Directory | ForEach-Object { Write-Host $_.FullName }
-        
-        Write-Host "Checking inside each target folder:"
-        Get-ChildItem "$(Build.SourcesDirectory)\Infragistics.QueryBuilder.Executor\bin\$(buildConfiguration)" -Recurse -Include *.dll
+        $outputDir = "$(Build.ArtifactStagingDirectory)\executor-build"
+        Write-Host "Listing contents of: $outputDir"
+
+        if (-Not (Test-Path $outputDir)) {
+          Write-Error "Output folder not found: $outputDir"
+          exit 1
+        }
+
+        Get-ChildItem $outputDir -Recurse | ForEach-Object {
+          Write-Host $_.FullName
+        }
       displayName: 'Debug: List build output contents'
 
     - powershell: |
