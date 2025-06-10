@@ -8,6 +8,8 @@ pr:
     exclude:
       - '*'
 
+name: pr.$(prId)-$(prIteration)
+
 variables:
 - group: Code_Signing_Certificate_2023_2026
 - name: prId
