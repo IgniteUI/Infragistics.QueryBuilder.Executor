@@ -52,11 +52,11 @@
       - script: dotnet restore
         displayName: 'Restore Dependencies'
 
-      # - script: >
-      #     dotnet build ./Infragistics.QueryBuilder.Executor.csproj
-      #     --configuration $(buildConfiguration)
-      #     --no-restore
-      #   displayName: 'Build Project'
+      - script: >
+          dotnet build ./Infragistics.QueryBuilder.Executor.csproj
+          --configuration $(buildConfiguration)
+          --no-restore
+        displayName: 'Build Project'
       
       # - powershell: |
       #     Write-Host "Building project and forcing output path..."
