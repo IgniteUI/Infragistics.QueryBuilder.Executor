@@ -66,19 +66,19 @@
       #       -o $(Build.ArtifactStagingDirectory)\executor-build
       #   displayName: 'Build Project with Output Directory'
 
-      - powershell: |
-          $outputDir = "$(Build.ArtifactStagingDirectory)\executor-build"
-          Write-Host "Listing contents of: $outputDir"
+      # - powershell: |
+      #     $outputDir = "$(Build.ArtifactStagingDirectory)\executor-build"
+      #     Write-Host "Listing contents of: $outputDir"
 
-          if (-Not (Test-Path $outputDir)) {
-            Write-Error "Output folder not found: $outputDir"
-            exit 1
-          }
+      #     if (-Not (Test-Path $outputDir)) {
+      #       Write-Error "Output folder not found: $outputDir"
+      #       exit 1
+      #     }
 
-          Get-ChildItem $outputDir -Recurse | ForEach-Object {
-            Write-Host $_.FullName
-          }
-        displayName: 'Debug: List build output contents'
+      #     Get-ChildItem $outputDir -Recurse | ForEach-Object {
+      #       Write-Host $_.FullName
+      #     }
+      #   displayName: 'Debug: List build output contents'
 
       - powershell: |
           $certPath = '$(cert.secureFilePath)'
