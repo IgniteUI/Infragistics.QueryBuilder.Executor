@@ -32,7 +32,7 @@
       - task: UseDotNet@2
         inputs:
           packageType: 'sdk'
-          versionSpec: '5.x'
+          versionSpec: '9.x'
 
       - checkout: self
         persistCredentials: true
@@ -63,11 +63,10 @@
           dotnet build ./Infragistics.QueryBuilder.Executor.csproj `
             --configuration $(buildConfiguration) `
             --no-restore `
-            -o $(Build.ArtifactStagingDirectory)\executor-build
         displayName: 'Build Project with Output Directory'
 
       - powershell: |
-          $outputDir = "$(Build.ArtifactStagingDirectory)\executor-build"
+          $outputDir = "$(Build.SourcesDirectory)\bin\$(buildConfiguration)\net9.0"
           Write-Host "Listing contents of: $outputDir"
           if (-Not (Test-Path $outputDir)) {
             Write-Error "Output folder not found: $outputDir"
@@ -81,8 +80,7 @@
       - powershell: |
           $certPath = '$(cert.secureFilePath)'
           $certPassword = '$(SigningCertificatePassword)'
-          $dllFolder = "$(Build.ArtifactStagingDirectory)\executor-build"
-
+          $dllFolder = "$(Build.SourcesDirectory)\bin\$(buildConfiguration)\net9.0"
           Write-Host "Signing DLLs in folder: $dllFolder"
           if (-Not (Test-Path $dllFolder)) {
               Write-Error "Folder does not exist: $dllFolder"
@@ -115,7 +113,6 @@
       - powershell: |
           $certPath = '$(cert.secureFilePath)'
           $certPassword = '$(SigningCertificatePassword)'
-          $outputDir = "$(Build.ArtifactStagingDirectory)\executor-build"
           $packageOutputDir = "$(Build.ArtifactStagingDirectory)\nuget"
           $packageVersion = "$(GitVersion.NuGetVersionV2)"
 
@@ -123,7 +120,6 @@
           dotnet pack ./Infragistics.QueryBuilder.Executor.csproj `
             --no-build `
             --configuration $(buildConfiguration) `
-            -p:BuildOutputPath="$outputDir" `
             -p:SignAssembly=true `
             -p:AssemblyOriginatorKeyFile=$certPath `
             -p:PrivateKeyPassword=$certPassword `
