@@ -52,19 +52,19 @@
       - script: dotnet restore
         displayName: 'Restore Dependencies'
 
-      - script: >
-          dotnet build ./Infragistics.QueryBuilder.Executor.csproj
-          --configuration $(buildConfiguration)
-          --no-restore
-        displayName: 'Build Project'
+      # - script: >
+      #     dotnet build ./Infragistics.QueryBuilder.Executor.csproj
+      #     --configuration $(buildConfiguration)
+      #     --no-restore
+      #   displayName: 'Build Project'
       
-      # - powershell: |
-      #     Write-Host "Building project and forcing output path..."
-      #     dotnet build ./Infragistics.QueryBuilder.Executor.csproj `
-      #       --configuration $(buildConfiguration) `
-      #       --no-restore `
-      #       -o $(Build.ArtifactStagingDirectory)\executor-build
-      #   displayName: 'Build Project with Output Directory'
+      - powershell: |
+          Write-Host "Building project and forcing output path..."
+          dotnet build ./Infragistics.QueryBuilder.Executor.csproj `
+            --configuration $(buildConfiguration) `
+            --no-restore `
+            -o $(Build.ArtifactStagingDirectory)\executor-build
+        displayName: 'Build Project with Output Directory'
 
       - powershell: |
           $outputDir = "$(Build.ArtifactStagingDirectory)\executor-build"
