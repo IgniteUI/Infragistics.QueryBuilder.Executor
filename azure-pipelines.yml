@@ -112,17 +112,40 @@
           }
         displayName: 'Sign all DLL files with PFX certificate'
 
+      - powershell: |
+          $certPath = '$(cert.secureFilePath)'
+          $certPassword = '$(SigningCertificatePassword)'
+          $outputDir = "$(Build.ArtifactStagingDirectory)\executor-build"
+          $packageOutputDir = "$(Build.ArtifactStagingDirectory)\nuget"
+          $packageVersion = "$(GitVersion.NuGetVersionV2)"
 
-      - script: >
-          dotnet pack ./Infragistics.QueryBuilder.Executor.csproj
-          --configuration $(buildConfiguration)
-          --no-build
-          -p:SignAssembly=true
-          -p:AssemblyOriginatorKeyFile=$(cert.secureFilePath)
-          -p:PrivateKeyPassword=$(SigningCertificatePassword)
-          -p:PackageVersion=$(GitVersion.NuGetVersionV2)
-          -o $(Build.ArtifactStagingDirectory)/nuget
-        displayName: 'Pack NuGet Package'
+          Write-Host "Packing project from existing build output..."
+          dotnet pack ./Infragistics.QueryBuilder.Executor.csproj `
+            --no-build `
+            --configuration $(buildConfiguration) `
+            -p:BuildOutputPath="$outputDir" `
+            -p:SignAssembly=true `
+            -p:AssemblyOriginatorKeyFile=$certPath `
+            -p:PrivateKeyPassword=$certPassword `
+            -p:PackageVersion=$packageVersion `
+            -o $packageOutputDir
+
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "dotnet pack failed"
+            exit 1
+          }
+        displayName: 'Pack NuGet Package using PowerShell'
+
+      # - script: >
+      #     dotnet pack ./Infragistics.QueryBuilder.Executor.csproj
+      #     --configuration $(buildConfiguration)
+      #     --no-build
+      #     -p:SignAssembly=true
+      #     -p:AssemblyOriginatorKeyFile=$(cert.secureFilePath)
+      #     -p:PrivateKeyPassword=$(SigningCertificatePassword)
+      #     -p:PackageVersion=$(GitVersion.NuGetVersionV2)
+      #     -o $(Build.ArtifactStagingDirectory)/nuget
+      #   displayName: 'Pack NuGet Package'
 
       # - task: NuGetCommand@2
       #   inputs:
