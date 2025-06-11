@@ -1,125 +1,135 @@
-trigger:
-  branches:
-    include:
-      - master
+  trigger:
+    branches:
+      include:
+        - master
 
-pr:
-  branches:
-    exclude:
-      - '*'
+  pr:
+    branches:
+      exclude:
+        - '*'
 
-name: pr.$(prId)-$(prIteration)
+  name: pr.$(prId)-$(prIteration)
 
-variables:
-- group: Code_Signing_Certificate_2023_2026
-- name: prId
-  value: $[coalesce(variables['System.PullRequest.PullRequestId'], '000')]
-- name: prIteration
-  value: $[counter(variables['prId'], 1)]
+  variables:
+  - group: Code_Signing_Certificate_2023_2026
+  - name: prId
+    value: $[coalesce(variables['System.PullRequest.PullRequestId'], '000')]
+  - name: prIteration
+    value: $[counter(variables['prId'], 1)]
 
-stages:
-- stage: BuildAndPublish
-  condition: succeeded()
-  jobs: 
-  - job: BuildAndSign
-    pool:
-      vmImage: 'windows-latest'
+  stages:
+  - stage: BuildAndPublish
+    condition: succeeded()
+    jobs: 
+    - job: BuildAndSign
+      pool:
+        vmImage: 'windows-latest'
 
-    variables:
-      buildConfiguration: 'Release'
+      variables:
+        buildConfiguration: 'Release'
 
-    steps:
-    - task: UseDotNet@2
-      inputs:
-        packageType: 'sdk'
-        versionSpec: '5.x'
+      steps:
+      - task: UseDotNet@2
+        inputs:
+          packageType: 'sdk'
+          versionSpec: '5.x'
 
-    - checkout: self
-      persistCredentials: true
-      fetchDepth: 0
+      - checkout: self
+        persistCredentials: true
+        fetchDepth: 0
 
-    - task: GitVersion@5
-      inputs:
-        runtime: 'core'
-        versionSpec: '5.x'
-      name: gitVersion
+      - task: GitVersion@5
+        inputs:
+          runtime: 'core'
+          versionSpec: '5.x'
+        name: gitVersion
 
-    - task: DownloadSecureFile@1
-      name: cert
-      inputs:
-        secureFile: 'code-signing-certificate-2023-2026.pfx'
+      - task: DownloadSecureFile@1
+        name: cert
+        inputs:
+          secureFile: 'code-signing-certificate-2023-2026.pfx'
 
-    - script: dotnet restore
-      displayName: 'Restore Dependencies'
+      - script: dotnet restore
+        displayName: 'Restore Dependencies'
 
-    # - script: >
-    #     dotnet build ./Infragistics.QueryBuilder.Executor.csproj
-    #     --configuration $(buildConfiguration)
-    #     --no-restore
-    #   displayName: 'Build Project'
-    
-    - powershell: |
-        Write-Host "Building project and forcing output path..."
-        dotnet build ./Infragistics.QueryBuilder.Executor.csproj `
-          --configuration $(buildConfiguration) `
-          --no-restore `
-          -o $(Build.ArtifactStagingDirectory)\executor-build
-      displayName: 'Build Project with Output Directory'
+      # - script: >
+      #     dotnet build ./Infragistics.QueryBuilder.Executor.csproj
+      #     --configuration $(buildConfiguration)
+      #     --no-restore
+      #   displayName: 'Build Project'
+      
+      - powershell: |
+          Write-Host "Building project and forcing output path..."
+          dotnet build ./Infragistics.QueryBuilder.Executor.csproj `
+            --configuration $(buildConfiguration) `
+            --no-restore `
+            -o $(Build.ArtifactStagingDirectory)\executor-build
+        displayName: 'Build Project with Output Directory'
 
-    - powershell: |
-        $outputDir = "$(Build.ArtifactStagingDirectory)\executor-build"
-        Write-Host "Listing contents of: $outputDir"
+      - powershell: |
+          $outputDir = "$(Build.ArtifactStagingDirectory)\executor-build"
+          Write-Host "Listing contents of: $outputDir"
 
-        if (-Not (Test-Path $outputDir)) {
-          Write-Error "Output folder not found: $outputDir"
-          exit 1
-        }
-
-        Get-ChildItem $outputDir -Recurse | ForEach-Object {
-          Write-Host $_.FullName
-        }
-      displayName: 'Debug: List build output contents'
-
-    - powershell: |
-        $certPath = '$(cert.secureFilePath)'
-        $certPassword = '$(SigningCertificatePassword)'
-        $dllFolder = "$(Build.ArtifactStagingDirectory)\executor-build"
-
-        Write-Host "Signing DLLs in folder: $dllFolder"
-        if (-Not (Test-Path $dllFolder)) {
-            Write-Error "Folder does not exist: $dllFolder"
-            exit 1
-        }
-
-        $dllFiles = Get-ChildItem -Path $dllFolder -Filter *.dll -Recurse
-        $signtoolPath = "${env:ProgramFiles(x86)}\Windows Kits\10\bin\x64\signtool.exe"
-
-        foreach ($dll in $dllFiles) {
-          Write-Host "Signing $($dll.FullName)..."
-          & $signtoolPath sign /f $certPath /p $certPassword /tr http://timestamp.digicert.com /td sha256 /fd sha256 $dll.FullName
-
-          if ($LASTEXITCODE -ne 0) {
-            Write-Error "Signing failed for $($dll.FullName)"
+          if (-Not (Test-Path $outputDir)) {
+            Write-Error "Output folder not found: $outputDir"
             exit 1
           }
-        }
-      displayName: 'Sign all DLL files with PFX certificate'
 
-    - script: >
-        dotnet pack ./Infragistics.QueryBuilder.Executor.csproj
-        --configuration $(buildConfiguration)
-        --no-build
-        -p:SignAssembly=true
-        -p:AssemblyOriginatorKeyFile=$(cert.secureFilePath)
-        -p:PrivateKeyPassword=$(SigningCertificatePassword)
-        -p:PackageVersion=$(GitVersion.NuGetVersionV2)
-        -o $(Build.ArtifactStagingDirectory)/nuget
-      displayName: 'Pack NuGet Package'
+          Get-ChildItem $outputDir -Recurse | ForEach-Object {
+            Write-Host $_.FullName
+          }
+        displayName: 'Debug: List build output contents'
 
-    # - task: NuGetCommand@2
-    #   inputs:
-    #     command: 'push'
-    #     packagesToPush: '$(Build.ArtifactStagingDirectory)/nuget/*.nupkg'
-    #     nuGetFeedType: 'external'
-    #     publishFeedCredentials: 'NuGet.org API Key'
-    #   displayName: 'Publish to NuGet.org'
+      - powershell: |
+          $certPath = '$(cert.secureFilePath)'
+          $certPassword = '$(SigningCertificatePassword)'
+          $dllFolder = "$(Build.ArtifactStagingDirectory)\executor-build"
+
+          Write-Host "Signing DLLs in folder: $dllFolder"
+          if (-Not (Test-Path $dllFolder)) {
+              Write-Error "Folder does not exist: $dllFolder"
+              exit 1
+          }
+
+          $signtoolPath = Get-ChildItem -Path "${env:ProgramFiles(x86)}\Windows Kits\10\bin" -Recurse -Filter signtool.exe |
+              Where-Object { $_.FullName -match 'x64\\signtool\.exe$' } |
+              Select-Object -First 1
+
+          if (-not $signtoolPath) {
+              Write-Error "signtool.exe not found in Windows Kits"
+              exit 1
+          }
+
+          Write-Host "Using signtool at: $($signtoolPath.FullName)"
+
+          $dllFiles = Get-ChildItem -Path $dllFolder -Filter *.dll -Recurse
+          foreach ($dll in $dllFiles) {
+            Write-Host "Signing $($dll.FullName)..."
+            & $signtoolPath.FullName sign /f $certPath /p $certPassword /tr http://timestamp.digicert.com /td sha256 /fd sha256 $dll.FullName
+
+            if ($LASTEXITCODE -ne 0) {
+              Write-Error "Signing failed for $($dll.FullName)"
+              exit 1
+            }
+          }
+        displayName: 'Sign all DLL files with PFX certificate'
+
+
+      - script: >
+          dotnet pack ./Infragistics.QueryBuilder.Executor.csproj
+          --configuration $(buildConfiguration)
+          --no-build
+          -p:SignAssembly=true
+          -p:AssemblyOriginatorKeyFile=$(cert.secureFilePath)
+          -p:PrivateKeyPassword=$(SigningCertificatePassword)
+          -p:PackageVersion=$(GitVersion.NuGetVersionV2)
+          -o $(Build.ArtifactStagingDirectory)/nuget
+        displayName: 'Pack NuGet Package'
+
+      # - task: NuGetCommand@2
+      #   inputs:
+      #     command: 'push'
+      #     packagesToPush: '$(Build.ArtifactStagingDirectory)/nuget/*.nupkg'
+      #     nuGetFeedType: 'external'
+      #     publishFeedCredentials: 'NuGet.org API Key'
+      #   displayName: 'Publish to NuGet.org'
