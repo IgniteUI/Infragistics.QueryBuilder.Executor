@@ -63,7 +63,7 @@
           dotnet build ./Infragistics.QueryBuilder.Executor.csproj `
             --configuration $(buildConfiguration) `
             --no-restore
-        displayName: 'Build Project with Output Directory'
+        displayName: 'Build Project'
 
       - powershell: |
           $outputDir = "$(Build.SourcesDirectory)\bin\$(buildConfiguration)\net9.0"
