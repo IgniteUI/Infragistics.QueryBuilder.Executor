@@ -120,35 +120,14 @@
           dotnet pack ./Infragistics.QueryBuilder.Executor.csproj `
             --no-build `
             --configuration $(buildConfiguration) `
-            -p:SignAssembly=true `
-            -p:AssemblyOriginatorKeyFile=$certPath `
-            -p:PrivateKeyPassword=$certPassword `
             -p:PackageVersion=$packageVersion `
             -o $packageOutputDir
 
           if ($LASTEXITCODE -ne 0) {
             Write-Error "dotnet pack failed"
             exit 1
-          }
+          } 
         displayName: 'Pack NuGet Package using PowerShell'
-
-      - powershell: |
-          $outputDir = "$(Build.SourcesDirectory)\bin\$(buildConfiguration)\net9.0"
-          $targetDir = "$(Build.ArtifactStagingDirectory)\SignedDlls"
-
-          Write-Host "Copying signed DLLs from $outputDir to $targetDir"
-
-          if (-Not (Test-Path $outputDir)) {
-            Write-Error "Source directory does not exist: $outputDir"
-            exit 1
-          }
-
-          New-Item -ItemType Directory -Force -Path $targetDir | Out-Null
-          Copy-Item -Path "$outputDir\*.dll", "$outputDir\*.pdb", "$outputDir\*.xml" `
-              -Destination $targetDir -Recurse -Force
-
-          Write-Host "Signed DLLs copied to artifact staging directory."
-        displayName: 'Stage Signed Artifacts'
 
       - task: PublishBuildArtifacts@1
         inputs:
