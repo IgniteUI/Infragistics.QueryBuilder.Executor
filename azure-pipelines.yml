@@ -132,16 +132,30 @@
           }
         displayName: 'Pack NuGet Package using PowerShell'
 
-      # - script: >
-      #     dotnet pack ./Infragistics.QueryBuilder.Executor.csproj
-      #     --configuration $(buildConfiguration)
-      #     --no-build
-      #     -p:SignAssembly=true
-      #     -p:AssemblyOriginatorKeyFile=$(cert.secureFilePath)
-      #     -p:PrivateKeyPassword=$(SigningCertificatePassword)
-      #     -p:PackageVersion=$(GitVersion.NuGetVersionV2)
-      #     -o $(Build.ArtifactStagingDirectory)/nuget
-      #   displayName: 'Pack NuGet Package'
+      - powershell: |
+          $outputDir = "$(Build.SourcesDirectory)\bin\$(buildConfiguration)\net9.0"
+          $targetDir = "$(Build.ArtifactStagingDirectory)\SignedDlls"
+
+          Write-Host "Copying signed DLLs from $outputDir to $targetDir"
+
+          if (-Not (Test-Path $outputDir)) {
+            Write-Error "Source directory does not exist: $outputDir"
+            exit 1
+          }
+
+          New-Item -ItemType Directory -Force -Path $targetDir | Out-Null
+          Copy-Item -Path "$outputDir\*.dll", "$outputDir\*.pdb", "$outputDir\*.xml" `
+              -Destination $targetDir -Recurse -Force
+
+          Write-Host "Signed DLLs copied to artifact staging directory."
+        displayName: 'Stage Signed Artifacts'
+
+      - task: PublishBuildArtifacts@1
+        inputs:
+          PathtoPublish: '$(Build.ArtifactStagingDirectory)/nuget'
+          ArtifactName: 'NuGetPackage'
+          publishLocation: 'Container'
+        displayName: 'Publish nuget Package as Build Artifact'
 
       # - task: NuGetCommand@2
       #   inputs:
