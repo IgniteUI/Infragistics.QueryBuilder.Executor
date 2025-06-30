@@ -140,7 +140,7 @@
         inputs:
           targetType: 'inline'
           script: |
-            nuget.exe sign $(Build.ArtifactStagingDirectory)\nuget -CertificatePath $(cert.secureFilePath) -CertificatePassword $env:CERT_PASS -Timestamper $(SigningCertificateTimestampUrl)
+            nuget.exe sign $(Build.ArtifactStagingDirectory)\nuget\*.nupkg -CertificatePath $(cert.secureFilePath) -CertificatePassword $env:CERT_PASS -Timestamper $(SigningCertificateTimestampUrl)
 
       - task: PublishBuildArtifacts@1
         inputs:
