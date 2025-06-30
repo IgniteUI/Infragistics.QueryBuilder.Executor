@@ -71,7 +71,7 @@
       #    #workingDirectory: '$(Build.SourcesDirectory)'
 
       - script: |
-          dotnet build . -configuration $(buildConfiguration) /p:Version$(GitVersion.NuGetVersionV2)
+          dotnet build . -configuration $(buildConfiguration) /p:Version=$(GitVersion.NuGetVersionV2)
         displayName: 'Build Project'
         workingDirectory: $(Build.SourcesDirectory)
 
