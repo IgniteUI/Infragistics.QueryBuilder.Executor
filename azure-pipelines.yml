@@ -99,7 +99,7 @@
           $dllFiles = Get-ChildItem -Path $dllFolder -Filter *.dll -Recurse
           foreach ($dll in $dllFiles) {
             Write-Host "Signing $($dll.FullName)..."
-            & $signtoolPath.FullName sign /f $(cert.secureFilePath) /p $(SigningCertificatePassword) /tr $(SigningCertificateTimestampUrl) /td sha256 /fd sha256 $dll.FullName
+            & $signtoolPath.FullName sign /f $(cert.secureFilePath) /p $env:CERT_PASS /tr $(SigningCertificateTimestampUrl) /td sha256 /fd sha256 $dll.FullName
 
             if ($LASTEXITCODE -ne 0) {
               Write-Error "Signing failed for $($dll.FullName)"
@@ -107,6 +107,8 @@
             }
           }
         displayName: 'Sign all DLL files with PFX certificate'
+        env:
+          CERT_PASS: $(SigningCertificatePassword)
 
       - powershell: |
           $packageOutputDir = "$(Build.ArtifactStagingDirectory)\nuget"
