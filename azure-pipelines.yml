@@ -16,6 +16,8 @@
     value: $[coalesce(variables['System.PullRequest.PullRequestId'], '000')]
   - name: prIteration
     value: $[counter(variables['prId'], 1)]
+  - name: buildConfiguration
+    value: Release
 
   stages:
   - stage: BuildAndPublish
@@ -24,9 +26,6 @@
     - job: BuildAndSign
       pool:
         vmImage: 'windows-latest'
-
-      variables:
-        buildConfiguration: 'Release'
 
       steps:
       - task: UseDotNet@2
@@ -78,15 +77,14 @@
         displayName: 'Debug: List build output contents'
 
       - powershell: |
-          $certPath = '$(cert.secureFilePath)'
-          $certPassword = '$(SigningCertificatePassword)'
           $dllFolder = "$(Build.SourcesDirectory)\bin\$(buildConfiguration)\net9.0"
           Write-Host "Signing DLLs in folder: $dllFolder"
           if (-Not (Test-Path $dllFolder)) {
               Write-Error "Folder does not exist: $dllFolder"
               exit 1
           }
-
+          
+          Write-Host "Trying to use the latest version of the Windows Kit and the signtool from it"
           $signtoolPath = Get-ChildItem -Path "${env:ProgramFiles(x86)}\Windows Kits\10\bin" -Recurse -Filter signtool.exe |
               Where-Object { $_.FullName -match 'x64\\signtool\.exe$' } |
               Select-Object -First 1
@@ -101,7 +99,7 @@
           $dllFiles = Get-ChildItem -Path $dllFolder -Filter *.dll -Recurse
           foreach ($dll in $dllFiles) {
             Write-Host "Signing $($dll.FullName)..."
-            & $signtoolPath.FullName sign /f $certPath /p $certPassword /tr http://timestamp.digicert.com /td sha256 /fd sha256 $dll.FullName
+            & $signtoolPath.FullName sign /f $cert.secureFilePath /p $(SigningCertificatePassword) /tr $(SigningCertificateTimestampUrl) /td sha256 /fd sha256 $dll.FullName
 
             if ($LASTEXITCODE -ne 0) {
               Write-Error "Signing failed for $($dll.FullName)"
@@ -111,8 +109,6 @@
         displayName: 'Sign all DLL files with PFX certificate'
 
       - powershell: |
-          $certPath = '$(cert.secureFilePath)'
-          $certPassword = '$(SigningCertificatePassword)'
           $packageOutputDir = "$(Build.ArtifactStagingDirectory)\nuget"
           $packageVersion = "$(GitVersion.NuGetVersionV2)"
 
@@ -128,6 +124,15 @@
             exit 1
           } 
         displayName: 'Pack NuGet Package using PowerShell'
+
+      - task: PowerShell@2 
+        displayName: 'Sign NuGet package'
+        env:
+          CERT_PASS: $(SigningCertificatePassword)
+        inputs:
+          targetType: 'inline'
+          script: |
+            nuget.exe sign $(Build.ArtifactStagingDirectory)\nuget -CertificatePath $(CodeSigningCertificate.secureFilePath) -CertificatePassword $env:CERT_PASS -Timestamper $(SigningCertificateTimestampUrl)
 
       - task: PublishBuildArtifacts@1
         inputs:
