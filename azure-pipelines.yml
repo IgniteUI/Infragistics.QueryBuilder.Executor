@@ -76,11 +76,19 @@
       #   displayName: 'Build Project'
       #   workingDirectory: $(Build.SourcesDirectory)
 
-      - script: |
-          echo "GitVersion.NuGetVersionV2 = $(GitVersion.NuGetVersionV2)"
-          dotnet build ./Infragistics.QueryBuilder.Executor.csproj -c $(buildConfiguration) /p:Version=$(GitVersion.NuGetVersionV2)
+      # - script: | #works
+      #     echo "GitVersion.NuGetVersionV2 = $(GitVersion.NuGetVersionV2)"
+      #     dotnet build ./Infragistics.QueryBuilder.Executor.csproj -c $(buildConfiguration) /p:Version=$(GitVersion.NuGetVersionV2)
+      #   displayName: 'Build Project'
+      #   workingDirectory: $(Build.SourcesDirectory)
+
+      - task: DotNetCoreCLI@2
         displayName: 'Build Project'
-        workingDirectory: $(Build.SourcesDirectory)
+        inputs:
+          command: 'build'
+          projects: 'Infragistics.QueryBuilder.Executor.csproj'
+          arguments: '-c $(buildConfiguration) /p:Version=$(GitVersion.NuGetVersionV2)'
+          workingDirectory: '$(Build.SourcesDirectory)'
 
       - powershell: |
           $outputDir = "$(Build.SourcesDirectory)\bin\$(buildConfiguration)\net9.0"
