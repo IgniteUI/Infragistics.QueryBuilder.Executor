@@ -48,8 +48,8 @@
         inputs:
           secureFile: 'code-signing-certificate-2023-2026.pfx'
 
-      - script: dotnet restore
-        displayName: 'Restore Dependencies'
+      #- script: dotnet restore
+      #  displayName: 'Restore Dependencies'
 
       # - script: >
       #     dotnet build ./Infragistics.QueryBuilder.Executor.csproj
@@ -57,12 +57,18 @@
       #     --no-restore
       #   displayName: 'Build Project'
       
-      - powershell: |
-          Write-Host "Building project and forcing output path..."
-          dotnet build ./Infragistics.QueryBuilder.Executor.csproj `
-            --configuration $(buildConfiguration) `
-            --no-restore
-        displayName: 'Build Project'
+      #- powershell: |
+      #    Write-Host "Building project and forcing output path..."
+      #    dotnet build ./Infragistics.QueryBuilder.Executor.csproj `
+      #      --configuration $(buildConfiguration) `
+      #      --no-restore
+      #  displayName: 'Build Project'
+      - task: DotNetCoreCLI@2
+        displayName: Build project
+        inputs:
+          command: 'build'
+          arguments: '--configuration $(buildConfiguration)'
+          workingDirectory: '$(Build.SourcesDirectory)'
 
       - powershell: |
           $outputDir = "$(Build.SourcesDirectory)\bin\$(buildConfiguration)\net9.0"
