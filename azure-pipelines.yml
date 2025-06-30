@@ -114,26 +114,44 @@
           $dllFolder = "$(Build.SourcesDirectory)\bin\$(buildConfiguration)\net9.0"
           Write-Host "Checking if DLLs in $dllFolder are signed..."
 
+          if (-Not (Test-Path $dllFolder)) {
+            Write-Error "DLL folder not found: $dllFolder"
+            exit 1
+          }
+
           $signtool = Get-ChildItem -Path "${env:ProgramFiles(x86)}\Windows Kits\10\bin" -Recurse -Filter signtool.exe |
             Where-Object { $_.FullName -match 'x64\\signtool\.exe$' } |
             Select-Object -First 1
 
           if (-not $signtool) {
-            Write-Error "signtool.exe not found under Windows Kits"
+            Write-Error "signtool.exe not found"
             exit 1
           }
 
           Write-Host "Using signtool: $($signtool.FullName)"
 
-          Get-ChildItem $dllFolder -Filter *.dll -Recurse | ForEach-Object {
-            Write-Host "Verifying: $($_.FullName)"
-            & $signtool.FullName verify /pa $_.FullName
+          $dllFiles = Get-ChildItem -Path $dllFolder -Filter *.dll -Recurse
+          $errorFound = $false
+
+          foreach ($dll in $dllFiles) {
+            Write-Host "`nVerifying: $($dll.FullName)"
+            & $signtool.FullName verify /pa /v $dll.FullName
+
             if ($LASTEXITCODE -ne 0) {
-              Write-Error "Signature verification failed for $($_.FullName)"
-              exit 1
+              Write-Error "Signature verification failed for: $($dll.FullName)"
+              $errorFound = $true
+            } else {
+              Write-Host "Verified: $($dll.FullName)"
             }
           }
-        displayName: 'Verify DLL Signatures'
+
+          if ($errorFound) {
+            Write-Error "One or more DLLs are not properly signed."
+            exit 1
+          } else {
+            Write-Host "`n🎉 All DLLs are signed and verified."
+          }
+        displayName: 'Verify All DLL Signatures'
 
       - powershell: |
           $certPath = '$(cert.secureFilePath)'
