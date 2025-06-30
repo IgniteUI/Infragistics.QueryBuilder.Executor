@@ -141,5 +141,5 @@
       #     command: 'push'
       #     packagesToPush: '$(Build.ArtifactStagingDirectory)/nuget/*.nupkg'
       #     nuGetFeedType: 'external'
-      #     publishFeedCredentials: 'NuGet.org API Key'
+      #     publishFeedCredentials: 'NuGet'
       #   displayName: 'Publish to NuGet.org'
