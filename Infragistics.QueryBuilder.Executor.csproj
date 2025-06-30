@@ -4,6 +4,14 @@
     <TargetFramework>net9.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+	<PackageId>MyCompany.MyLibrary</PackageId>
+    <Authors>Infragistics Inc.</Authors>
+	<Owners>Infragistics Inc.</Owners>
+    <Company>Infragistics Inc.</Company>
+    <Description>MyCompany's library for query execution and data manipulation.</Description>
+	<Version>1.0.0.0</Version>
+	<!-->We want to generate the version attributes at runtime and we need this flag enabled for that<-->
+	<GenerateAssemblyInfo>true</GenerateAssemblyInfo>
   </PropertyGroup>
 
   <ItemGroup>
