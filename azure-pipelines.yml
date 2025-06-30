@@ -28,14 +28,13 @@
         vmImage: 'windows-latest'
 
       steps:
+      - checkout: self
+        fetchDepth: 0
+
       - task: UseDotNet@2
         inputs:
           packageType: 'sdk'
           version: '9.x'
-
-      - checkout: self
-        persistCredentials: true
-        fetchDepth: 0
 
       - task: GitVersion@5
         inputs:
@@ -66,7 +65,7 @@
         displayName: Build project
         inputs:
           command: 'build'
-          projects: '$(Build.SourcesDirectory)/*.sln'
+          #projects: '$(Build.SourcesDirectory)/*.sln'
           arguments: '--configuration $(buildConfiguration) /p:Version$(GitVersion.NuGetVersionV2)'
           #workingDirectory: '$(Build.SourcesDirectory)'
 
