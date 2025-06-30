@@ -13,8 +13,6 @@
 	<!-->We want to generate the version attributes at runtime and we need this flag enabled for that<-->
 	<GenerateAssemblyInfo>true</GenerateAssemblyInfo>
 	<PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
-	<PackageLicenseFile>LICENSE.txt</PackageLicenseFile>
-	<PackageProjectUrl>https://www.infragistics.com/products/ignite-ui-blazor</PackageProjectUrl>
 	<Copyright>Infragistics</Copyright>
 	<PackageReadmeFile>ReadMe.md</PackageReadmeFile>
 	<PackageLicenseFile>License.txt</PackageLicenseFile>
@@ -26,6 +24,10 @@
     <PackageReference Include="AutoMapper" Version="14.0.0" />
     <PackageReference Include="Microsoft.EntityFrameworkCore" Version="9.0.4" />
     <PackageReference Include="Swashbuckle.AspNetCore.SwaggerGen" Version="8.1.1" />
+	<None Include="License.txt;ReadMe.md">
+		<Pack>True</Pack>
+		<PackagePath></PackagePath>
+	</None>
   </ItemGroup>
 
 </Project>
