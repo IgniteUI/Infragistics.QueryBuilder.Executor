@@ -31,7 +31,7 @@
       - task: UseDotNet@2
         inputs:
           packageType: 'sdk'
-          versionSpec: '9.x'
+          version: '9.x'
 
       - checkout: self
         persistCredentials: true
@@ -39,7 +39,6 @@
 
       - task: GitVersion@5
         inputs:
-          runtime: 'core'
           versionSpec: '5.x'
         name: gitVersion
 
@@ -67,8 +66,9 @@
         displayName: Build project
         inputs:
           command: 'build'
+          projects: '$(Build.SourcesDirectory)/*.sln'
           arguments: '--configuration $(buildConfiguration) /p:Version$(GitVersion.NuGetVersionV2)'
-          workingDirectory: '$(Build.SourcesDirectory)'
+          #workingDirectory: '$(Build.SourcesDirectory)'
 
 
       - powershell: |
