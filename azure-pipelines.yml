@@ -70,12 +70,17 @@
       #    arguments: '--configuration $(buildConfiguration) /p:Version$(GitVersion.NuGetVersionV2)'
       #    #workingDirectory: '$(Build.SourcesDirectory)'
 
+      # - script: |
+      #     echo "GitVersion.NuGetVersionV2 = $(GitVersion.NuGetVersionV2)"
+      #     dotnet build . -configuration $(buildConfiguration) /p:Version=$(GitVersion.NuGetVersionV2)
+      #   displayName: 'Build Project'
+      #   workingDirectory: $(Build.SourcesDirectory)
+
       - script: |
           echo "GitVersion.NuGetVersionV2 = $(GitVersion.NuGetVersionV2)"
-          dotnet build . -configuration $(buildConfiguration) /p:Version=$(GitVersion.NuGetVersionV2)
+          dotnet build ./Infragistics.QueryBuilder.Executor.csproj -c $(buildConfiguration) /p:Version=$(GitVersion.NuGetVersionV2)
         displayName: 'Build Project'
         workingDirectory: $(Build.SourcesDirectory)
-
 
       - powershell: |
           $outputDir = "$(Build.SourcesDirectory)\bin\$(buildConfiguration)\net9.0"
