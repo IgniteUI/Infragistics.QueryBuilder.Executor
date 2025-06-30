@@ -114,16 +114,20 @@
           $dllFolder = "$(Build.SourcesDirectory)\bin\$(buildConfiguration)\net9.0"
           Write-Host "Checking if DLLs in $dllFolder are signed..."
 
-          $signtool = "${env:ProgramFiles(x86)}\Windows Kits\10\bin\x64\signtool.exe"
+          $signtool = Get-ChildItem -Path "${env:ProgramFiles(x86)}\Windows Kits\10\bin" -Recurse -Filter signtool.exe |
+            Where-Object { $_.FullName -match 'x64\\signtool\.exe$' } |
+            Select-Object -First 1
 
-          if (-Not (Test-Path $signtool)) {
-            Write-Error "signtool.exe not found"
+          if (-not $signtool) {
+            Write-Error "signtool.exe not found under Windows Kits"
             exit 1
           }
 
+          Write-Host "Using signtool: $($signtool.FullName)"
+
           Get-ChildItem $dllFolder -Filter *.dll -Recurse | ForEach-Object {
             Write-Host "Verifying: $($_.FullName)"
-            & $signtool verify /pa $_.FullName
+            & $signtool.FullName verify /pa $_.FullName
             if ($LASTEXITCODE -ne 0) {
               Write-Error "Signature verification failed for $($_.FullName)"
               exit 1
