@@ -15,7 +15,6 @@
 	<PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
 	<Copyright>Infragistics</Copyright>
 	<PackageReadmeFile>ReadMe.md</PackageReadmeFile>
-	<PackageLicenseFile>License.txt</PackageLicenseFile>
 	<PackageProjectUrl>https://www.infragistics.com/products/appbuilder/app-builder-overview</PackageProjectUrl>
 	<RepositoryUrl>https://github.com/IgniteUI/Infragistics.QueryBuilder.Executor</RepositoryUrl>
     	<RepositoryType>git</RepositoryType>
