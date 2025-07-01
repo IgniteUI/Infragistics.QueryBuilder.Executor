@@ -20,7 +20,7 @@
 	<RepositoryUrl>https://github.com/IgniteUI/Infragistics.QueryBuilder.Executor</RepositoryUrl>
     	<RepositoryType>git</RepositoryType>
     	<PackageDocumentationUrl>https://github.com/IgniteUI/Infragistics.QueryBuilder.Executor</PackageDocumentationUrl>
-
+	<PackageTags>Infragistics;App Builder;Ignite UI;Filtering;Query;Query Builder;Models</PackageTags>
   </PropertyGroup>
 
   <ItemGroup>
