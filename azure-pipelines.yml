@@ -132,7 +132,6 @@
             --no-build `
             --configuration $(buildConfiguration) `
             -p:PackageVersion=$packageVersion `
-            -p:IncludePackageReferencesDuringMarkup=true `
             -o $packageOutputDir
 
           if ($LASTEXITCODE -ne 0) {
