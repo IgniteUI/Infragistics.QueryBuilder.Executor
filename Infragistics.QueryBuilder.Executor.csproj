@@ -16,7 +16,7 @@
         <PackageLicenseExpression>MIT</PackageLicenseExpression>
 	<Copyright>Infragistics</Copyright>
 	<PackageReadmeFile>ReadMe.md</PackageReadmeFile>
-	<PackageProjectUrl>https://www.infragistics.com/products/appbuilder/app-builder-overview</PackageProjectUrl>
+	<PackageProjectUrl>https://github.com/IgniteUI/Infragistics.QueryBuilder.Executor</PackageProjectUrl>
 	<RepositoryUrl>https://github.com/IgniteUI/Infragistics.QueryBuilder.Executor</RepositoryUrl>
     	<RepositoryType>git</RepositoryType>
     	<PackageDocumentationUrl>https://github.com/IgniteUI/Infragistics.QueryBuilder.Executor</PackageDocumentationUrl>
