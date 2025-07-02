@@ -5,7 +5,7 @@ trigger:
 # This pipeline is meant to build & deploy upon tagging. It's not meant to be a part of PR validation.
 pr: none
 
-name: pr.$(prId)-$(prIteration)
+name: $(Build.SourceBranchName)_$(Year:yyyy).$(Month).$(DayOfMonth)$(Rev:.r)
 
 variables:
 - group: Code_Signing_Certificate_2023_2026
