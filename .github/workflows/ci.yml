@@ -28,7 +28,7 @@ jobs:
     - name: Build solution
       run: dotnet build Infragistics.QueryBuilder.Executor.sln --configuration Release --no-restore
 
-    - name: Build solution
+    - name: Pack solution - NuGet
       run: dotnet pack Infragistics.QueryBuilder.Executor.sln --configuration Release --no-build  
 
     - name: Run tests
