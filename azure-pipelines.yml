@@ -131,7 +131,6 @@
           dotnet pack ./Infragistics.QueryBuilder.Executor.csproj `
             --no-build `
             --configuration $(buildConfiguration) `
-            -p:IncludeDocumentationFile=true `
             -p:PackageVersion=$packageVersion `
             -o $packageOutputDir
 
