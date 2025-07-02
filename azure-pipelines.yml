@@ -46,42 +46,6 @@
         inputs:
           secureFile: 'code-signing-certificate-2023-2026.pfx'
 
-      #- script: dotnet restore
-      #  displayName: 'Restore Dependencies'
-
-      # - script: >
-      #     dotnet build ./Infragistics.QueryBuilder.Executor.csproj
-      #     --configuration $(buildConfiguration)
-      #     --no-restore
-      #   displayName: 'Build Project'
-      
-      #- powershell: |
-      #    Write-Host "Building project and forcing output path..."
-      #    dotnet build ./Infragistics.QueryBuilder.Executor.csproj `
-      #      --configuration $(buildConfiguration) `
-      #      --no-restore
-      #  displayName: 'Build Project'
-      
-      #- task: DotNetCoreCLI@2
-      #  displayName: Build project
-      #  inputs:
-      #    command: 'build'
-      #    #projects: '$(Build.SourcesDirectory)/*.sln'
-      #    arguments: '--configuration $(buildConfiguration) /p:Version$(GitVersion.NuGetVersionV2)'
-      #    #workingDirectory: '$(Build.SourcesDirectory)'
-
-      # - script: |
-      #     echo "GitVersion.NuGetVersionV2 = $(GitVersion.NuGetVersionV2)"
-      #     dotnet build . -configuration $(buildConfiguration) /p:Version=$(GitVersion.NuGetVersionV2)
-      #   displayName: 'Build Project'
-      #   workingDirectory: $(Build.SourcesDirectory)
-
-      # - script: | #works
-      #     echo "GitVersion.NuGetVersionV2 = $(GitVersion.NuGetVersionV2)"
-      #     dotnet build ./Infragistics.QueryBuilder.Executor.csproj -c $(buildConfiguration) /p:Version=$(GitVersion.NuGetVersionV2)
-      #   displayName: 'Build Project'
-      #   workingDirectory: $(Build.SourcesDirectory)
-
       - task: DotNetCoreCLI@2
         displayName: 'Build Project'
         inputs:
@@ -154,7 +118,7 @@
           PathtoPublish: '$(Build.ArtifactStagingDirectory)/nuget'
           ArtifactName: 'NuGetPackage'
           publishLocation: 'Container'
-        displayName: 'Publish nuget Package as Build Artifact'
+        displayName: 'Publish NuGet Package as Build Artifact'
 
       # - task: NuGetCommand@2
       #   inputs:
