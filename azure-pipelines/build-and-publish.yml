@@ -117,10 +117,10 @@ stages:
         publishLocation: 'Container'
       displayName: 'Publish NuGet Package as Build Artifact'
 
-    # - task: NuGetCommand@2
-    #   inputs:
-    #     command: 'push'
-    #     packagesToPush: '$(Build.ArtifactStagingDirectory)/nuget/*.nupkg'
-    #     nuGetFeedType: 'external'
-    #     publishFeedCredentials: 'NuGet'
-    #   displayName: 'Publish to NuGet.org'
+    - task: NuGetCommand@2
+      inputs:
+        command: 'push'
+        packagesToPush: '$(Build.ArtifactStagingDirectory)/nuget/*.nupkg'
+        nuGetFeedType: 'external'
+        publishFeedCredentials: 'NuGet.Org'
+      displayName: 'Publish to NuGet.org'
