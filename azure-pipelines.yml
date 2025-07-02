@@ -36,14 +36,6 @@
           packageType: 'sdk'
           version: '9.x'
 
-      - script: |
-          echo "Checking .NET SDK version:"
-          dotnet --info
-
-          echo "Checking NuGet CLI version:"
-          dotnet nuget --version
-        displayName: 'Check NuGet Version'
-
       - task: GitVersion@5
         inputs:
           versionSpec: '5.x'
