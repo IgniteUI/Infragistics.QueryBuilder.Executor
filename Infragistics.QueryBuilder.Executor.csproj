@@ -17,17 +17,19 @@
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
 	<Copyright>Infragistics</Copyright>
 	<PackageReadmeFile>ReadMe.md</PackageReadmeFile>
-	<PackageProjectUrl>https://www.infragistics.com/products/appbuilder/app-builder-overview</PackageProjectUrl>
+	<PackageProjectUrl>https://github.com/IgniteUI/Infragistics.QueryBuilder.Executor</PackageProjectUrl>
 	<RepositoryUrl>https://github.com/IgniteUI/Infragistics.QueryBuilder.Executor</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageDocumentationUrl>https://github.com/IgniteUI/Infragistics.QueryBuilder.Executor</PackageDocumentationUrl>
 	<PackageTags>Infragistics;App Builder;Ignite UI;Filtering;Query;Query Builder;Models</PackageTags>
+	<PackageIcon>IgniteUI.png</PackageIcon>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="AutoMapper" Version="14.0.0" />
     <PackageReference Include="Microsoft.EntityFrameworkCore" Version="9.0.4" />
     <PackageReference Include="Swashbuckle.AspNetCore.SwaggerGen" Version="8.1.1" />
+    <None Include="IgniteUI.png" Pack="true" PackagePath="" />
 	<None Include="ReadMe.md">
 		<Pack>True</Pack>
 		<PackagePath></PackagePath>
