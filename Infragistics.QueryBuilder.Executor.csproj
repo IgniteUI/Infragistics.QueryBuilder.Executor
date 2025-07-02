@@ -12,14 +12,15 @@
 	<Version>1.0.0.0</Version>
 	<!-->We want to generate the version attributes at runtime and we need this flag enabled for that<-->
 	<GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+	<GenerateDocumentationFile>true</GenerateDocumentationFile>
 	<PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
-        <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
 	<Copyright>Infragistics</Copyright>
 	<PackageReadmeFile>ReadMe.md</PackageReadmeFile>
 	<PackageProjectUrl>https://www.infragistics.com/products/appbuilder/app-builder-overview</PackageProjectUrl>
 	<RepositoryUrl>https://github.com/IgniteUI/Infragistics.QueryBuilder.Executor</RepositoryUrl>
-    	<RepositoryType>git</RepositoryType>
-    	<PackageDocumentationUrl>https://github.com/IgniteUI/Infragistics.QueryBuilder.Executor</PackageDocumentationUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageDocumentationUrl>https://github.com/IgniteUI/Infragistics.QueryBuilder.Executor</PackageDocumentationUrl>
 	<PackageTags>Infragistics;App Builder;Ignite UI;Filtering;Query;Query Builder;Models</PackageTags>
   </PropertyGroup>
 
