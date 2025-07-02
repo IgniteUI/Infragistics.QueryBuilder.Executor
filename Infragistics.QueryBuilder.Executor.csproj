@@ -21,14 +21,14 @@
     	<RepositoryType>git</RepositoryType>
     	<PackageDocumentationUrl>https://github.com/IgniteUI/Infragistics.QueryBuilder.Executor</PackageDocumentationUrl>
 	<PackageTags>Infragistics;App Builder;Ignite UI;Filtering;Query;Query Builder;Models</PackageTags>
-	<PackageIcon>IgniteUI.ico</PackageIcon>
+	<PackageIcon>IgniteUI.png</PackageIcon>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="AutoMapper" Version="14.0.0" />
     <PackageReference Include="Microsoft.EntityFrameworkCore" Version="9.0.4" />
     <PackageReference Include="Swashbuckle.AspNetCore.SwaggerGen" Version="8.1.1" />
-    <None Include="IgniteUI.ico" Pack="true" />
+    <None Include="IgniteUI.png" Pack="true" />
 	<None Include="ReadMe.md">
 		<Pack>True</Pack>
 		<PackagePath></PackagePath>
