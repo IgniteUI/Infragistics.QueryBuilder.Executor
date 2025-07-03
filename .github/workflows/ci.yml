@@ -1,0 +1,35 @@
+name: CI Build and Test
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v3
+      with:
+        dotnet-version: 9.x
+
+    - name: Restore dependencies
+      run: dotnet restore Infragistics.QueryBuilder.Executor.sln
+
+    - name: Build solution
+      run: dotnet build Infragistics.QueryBuilder.Executor.sln --configuration Release --no-restore
+
+    - name: Pack solution - NuGet
+      run: dotnet pack Infragistics.QueryBuilder.Executor.sln --configuration Release --no-build  
+
+    - name: Run tests
+      run: dotnet test Infragistics.QueryBuilder.Executor.sln --configuration Release --no-build --verbosity normal
