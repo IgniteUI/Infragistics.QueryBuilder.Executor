@@ -16,7 +16,7 @@ variables:
 - name: buildConfiguration
   value: Release
 - name: releaseTag
-  value: $[replace(variables['Build.SourceBranch'], 'refs/tags/', '')]
+  value: $(Build.SourceBranchName)
 
 stages:
 - stage: BuildAndPublish
@@ -35,23 +35,10 @@ stages:
         packageType: 'sdk'
         version: '9.x'
 
-    # - task: GitVersion@5
-    #   inputs:
-    #     versionSpec: '5.x'
-    #   name: gitVersion
-
     - task: DownloadSecureFile@1
       name: cert
       inputs:
         secureFile: 'code-signing-certificate-2023-2026.pfx'
-
-    # - task: DotNetCoreCLI@2
-    #   displayName: 'Build Project'
-    #   inputs:
-    #     command: 'build'
-    #     projects: 'Infragistics.QueryBuilder.Executor.csproj'
-    #     arguments: '-c $(buildConfiguration) /p:Version=$(GitVersion.NuGetVersionV2)'
-    #     workingDirectory: '$(Build.SourcesDirectory)'
 
     - task: DotNetCoreCLI@2
       displayName: 'Build Project'
