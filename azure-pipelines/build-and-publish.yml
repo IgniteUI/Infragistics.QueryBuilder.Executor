@@ -15,6 +15,8 @@ variables:
   value: $[counter(variables['prId'], 1)]
 - name: buildConfiguration
   value: Release
+- name: releaseTag
+  value: $[replace(variables['Build.SourceBranch'], 'refs/tags/', '')]
 
 stages:
 - stage: BuildAndPublish
@@ -33,23 +35,32 @@ stages:
         packageType: 'sdk'
         version: '9.x'
 
-    - task: GitVersion@5
-      inputs:
-        versionSpec: '5.x'
-      name: gitVersion
+    # - task: GitVersion@5
+    #   inputs:
+    #     versionSpec: '5.x'
+    #   name: gitVersion
 
     - task: DownloadSecureFile@1
       name: cert
       inputs:
         secureFile: 'code-signing-certificate-2023-2026.pfx'
 
+    # - task: DotNetCoreCLI@2
+    #   displayName: 'Build Project'
+    #   inputs:
+    #     command: 'build'
+    #     projects: 'Infragistics.QueryBuilder.Executor.csproj'
+    #     arguments: '-c $(buildConfiguration) /p:Version=$(GitVersion.NuGetVersionV2)'
+    #     workingDirectory: '$(Build.SourcesDirectory)'
+
     - task: DotNetCoreCLI@2
       displayName: 'Build Project'
       inputs:
         command: 'build'
         projects: 'Infragistics.QueryBuilder.Executor.csproj'
-        arguments: '-c $(buildConfiguration) /p:Version=$(GitVersion.NuGetVersionV2)'
-        workingDirectory: '$(Build.SourcesDirectory)'
+        arguments: >
+          -c $(buildConfiguration)
+          /p:Version=$(releaseTag)
 
     - powershell: |
         $outputDir = "$(Build.SourcesDirectory)\bin\$(buildConfiguration)\net9.0"
@@ -86,7 +97,7 @@ stages:
 
     - powershell: |
         $packageOutputDir = "$(Build.ArtifactStagingDirectory)\nuget"
-        $packageVersion = "$(GitVersion.NuGetVersionV2)"
+        $packageVersion = $(releaseTag)
 
         Write-Host "Packing project from existing build output..."
         dotnet pack ./Infragistics.QueryBuilder.Executor.csproj `
@@ -117,10 +128,10 @@ stages:
         publishLocation: 'Container'
       displayName: 'Publish NuGet Package as Build Artifact'
 
-    - task: NuGetCommand@2
-      inputs:
-        command: 'push'
-        packagesToPush: '$(Build.ArtifactStagingDirectory)/nuget/*.nupkg'
-        nuGetFeedType: 'external'
-        publishFeedCredentials: 'NuGet.Org'
-      displayName: 'Publish to NuGet.org'
+    # - task: NuGetCommand@2
+    #   inputs:
+    #     command: 'push'
+    #     packagesToPush: '$(Build.ArtifactStagingDirectory)/nuget/*.nupkg'
+    #     nuGetFeedType: 'external'
+    #     publishFeedCredentials: 'NuGet.Org'
+    #   displayName: 'Publish to NuGet.org'
