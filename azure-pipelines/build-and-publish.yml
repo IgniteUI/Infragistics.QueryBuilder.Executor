@@ -97,7 +97,7 @@ stages:
 
     - powershell: |
         $packageOutputDir = "$(Build.ArtifactStagingDirectory)\nuget"
-        $packageVersion = $(releaseTag)
+        $packageVersion = "$(releaseTag)"
 
         Write-Host "Packing project from existing build output..."
         dotnet pack ./Infragistics.QueryBuilder.Executor.csproj `
