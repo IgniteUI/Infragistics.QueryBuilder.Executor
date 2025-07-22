@@ -1,9 +1,4 @@
-﻿using AutoMapper;
-using AutoMapper.Internal;
-using AutoMapper.QueryableExtensions;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Infrastructure;
-using Swashbuckle.AspNetCore.SwaggerGen;
+﻿using System.Collections.Generic;
 using System.Globalization;
 using System.Linq.Expressions;
 using System.Reflection;
@@ -11,6 +6,12 @@ using System.Reflection.Emit;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
+using AutoMapper;
+using AutoMapper.Internal;
+using AutoMapper.QueryableExtensions;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Swashbuckle.AspNetCore.SwaggerGen;
 
 namespace Infragistics.QueryBuilder.Executor
 {
@@ -31,6 +32,15 @@ namespace Infragistics.QueryBuilder.Executor
             var currentDbContext = serviceProvider.GetService(typeof(ICurrentDbContext)) as ICurrentDbContext;
             var db = currentDbContext!.Context;
             return db is not null ? BuildQuery<TSource, TTarget>(db, source, query, mapper).ToArray() : Array.Empty<object>();
+        }
+
+        public static MethodInfo? GetGenericMethod(Type executorType, int attributeCount, Type[] genericArgs)
+        {
+            var method = executorType
+                .GetMethods(BindingFlags.Static | BindingFlags.Public)
+                .FirstOrDefault(m => m.CustomAttributes.Count() == attributeCount);
+
+            return method?.MakeGenericMethod(genericArgs);
         }
 
         private static IQueryable<object> BuildQuery<TSource, TTarget>(DbContext db, IQueryable<TSource> source, Query? query, IMapper? mapper = null)
@@ -224,7 +234,21 @@ namespace Infragistics.QueryBuilder.Executor
         {
             var t = query?.Entity.ToLower(CultureInfo.InvariantCulture) ?? string.Empty;
             var p = db.GetType().GetProperty(t, BindingFlags.IgnoreCase | BindingFlags.Public | BindingFlags.Instance) ?? throw new InvalidOperationException($"Property '{t}' not found on type '{db.GetType()}'");
-            return p.GetValue(db) is not IQueryable<dynamic> q ? Array.Empty<dynamic>() : [.. q.Run(query)];
+
+            var methods = typeof(QueryExecutor).GetMethods(BindingFlags.Static | BindingFlags.Public);
+            var method = methods?.FirstOrDefault(m => m.CustomAttributes.Count() == 1);
+            var dbSet = p.GetValue(db);
+            var genericType = p.PropertyType.GetGenericArguments().FirstOrDefault();
+
+            if (dbSet != null && genericType != null)
+            {
+
+                var genericMethod = GetGenericMethod(typeof(QueryExecutor), 1, [genericType]);
+
+                var queryable = dbSet?.GetType().GetMethod("AsQueryable")?.Invoke(dbSet, null);
+                return genericMethod?.Invoke(null, [queryable, query]) as IEnumerable<dynamic> ?? Array.Empty<dynamic>();
+            }
+            return Enumerable.Empty<dynamic>();
         }
 
         private static dynamic? ProjectField(object? obj, string field)
@@ -242,12 +266,17 @@ namespace Infragistics.QueryBuilder.Executor
             }
 
             var nonNullableType = Nullable.GetUnderlyingType(targetType) ?? targetType;
-            var value = jsonVal.Deserialize(targetType);
 
-            if (nonNullableType.IsEnum && value is string)
+            if (nonNullableType.IsEnum)
             {
-                return Expression.Constant(Enum.Parse(nonNullableType, (string)value));
+                var enumValue = jsonVal.Deserialize<string>();
+                if (enumValue != null)
+                {
+                    return Expression.Constant(Enum.Parse(nonNullableType, enumValue));
+                }
             }
+
+            var value = jsonVal.Deserialize(targetType);
 
             var convertedValue = Convert.ChangeType(value, nonNullableType, CultureInfo.InvariantCulture);
             return Expression.Constant(convertedValue, targetType);

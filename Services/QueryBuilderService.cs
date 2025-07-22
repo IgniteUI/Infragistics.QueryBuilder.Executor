@@ -18,27 +18,18 @@ namespace Infragistics.QueryBuilder.Executor
                 .FirstOrDefault(p => p.PropertyType.IsGenericType && p.Name.ToLower(CultureInfo.InvariantCulture) == t && p.PropertyType.GetGenericTypeDefinition() == typeof(DbSet<>));
             if (propInfo != null)
             {
-                var methods = typeof(QueryExecutor).GetMethods(BindingFlags.Static | BindingFlags.Public);
-                var method = methods?.FirstOrDefault(m => m.CustomAttributes.Count() == 2);
-
                 var dbSet = propInfo.GetValue(db);
                 var dbGenericType = dbSet?.GetType()?.GenericTypeArguments.FirstOrDefault();
-                if (dbGenericType != null && dbSet != null)
-                {
-                    var dtoGenericType = typeof(TResults).GetProperty(propInfo.Name)?.PropertyType.GetElementType();
-                    if (dtoGenericType != null)
-                    {
-                        var genericMethod = method?.MakeGenericMethod(dbGenericType, dtoGenericType);
+                var dtoGenericType = typeof(TResults).GetProperty(propInfo.Name)?.PropertyType.GetElementType();
 
-                        var asQueryableMethod = dbSet.GetType().GetMethod("AsQueryable");
-                        var queryable = asQueryableMethod?.Invoke(dbSet, null);
-                        if (queryable != null)
-                        {
-                            if (genericMethod?.Invoke(null, [queryable, query, mapper]) is object[] propRes)
-                            {
-                                return new Dictionary<string, object[]> { { propInfo.Name, propRes } };
-                            }
-                        }
+                if (dbSet != null && dbGenericType != null && dtoGenericType != null)
+                {
+                    var genericMethod = QueryExecutor.GetGenericMethod(typeof(QueryExecutor), 2, [dbGenericType, dtoGenericType]);
+
+                    var queryable = dbSet.GetType().GetMethod("AsQueryable")?.Invoke(dbSet, null);
+                    if (queryable != null && genericMethod?.Invoke(null, [queryable, query, mapper]) is object[] propRes)
+                    {
+                        return new Dictionary<string, object[]> { { propInfo.Name.ToLowerInvariant(), propRes } };
                     }
                 }
             }
