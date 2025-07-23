@@ -30,16 +30,11 @@ namespace Infragistics.QueryBuilder.Executor
 
             var dtoGenericType = resultProperty.PropertyType.GetElementType() ?? throw new ValidationException($"Missing Dto generic type");
 
-            var genericMethod = QueryExecutor.GetRunMethod(typeof(QueryExecutor), [dbGenericType, dtoGenericType]);
-
             var queryable = dbSet.GetType().GetMethod("AsQueryable")?.Invoke(dbSet, null)
                 ?? throw new InvalidOperationException($"DbSet '{propInfo.Name}' does not support AsQueryable().");
-            if ( genericMethod?.Invoke(null, [queryable, query, mapper]) is object[] propRes)
-            {
-                return new Dictionary<string, object[]> { { propInfo.Name.ToLowerInvariant(), propRes } };
-            }
 
-            throw new InvalidOperationException($"Unknown entity {t}");
+            var propRes = QueryExecutor.InvokeRunMethod([dbGenericType, dtoGenericType], [queryable, query, mapper]);
+            return new Dictionary<string, object[]> { { propInfo.Name.ToLowerInvariant(), propRes } };
         }
     }
 }

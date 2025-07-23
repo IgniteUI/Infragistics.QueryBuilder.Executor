@@ -34,15 +34,18 @@ namespace Infragistics.QueryBuilder.Executor
             return db is not null ? BuildQuery<TSource, TTarget>(db, source, query, mapper).ToArray() : Array.Empty<object>();
         }
 
-        public static MethodInfo? GetRunMethod(Type executorType, Type[] genericArgs)
+        public static object[] InvokeRunMethod(Type[] genericArgs, object?[] parameters)
         {
-            return executorType
+            var method = typeof(QueryExecutor)
                 .GetMethods(BindingFlags.Static | BindingFlags.Public)
                 .FirstOrDefault(m =>
                     m.Name == "Run" &&
                     m.IsGenericMethodDefinition &&
                     m.GetGenericArguments().Length == genericArgs.Length)
                 ?.MakeGenericMethod(genericArgs);
+
+            var result = method?.Invoke(null, parameters) ?? Array.Empty<object>();
+            return (object[])result;
         }
 
         private static IQueryable<object> BuildQuery<TSource, TTarget>(DbContext db, IQueryable<TSource> source, Query? query, IMapper? mapper = null)
@@ -242,11 +245,10 @@ namespace Infragistics.QueryBuilder.Executor
             var method = methods?.FirstOrDefault(m => m.CustomAttributes.Count() == 1);
             var dbSet = prop.GetValue(db) ?? throw new ValidationException($"DbSet property '{prop.Name}' is null in DbContext.");
             var genericType = prop.PropertyType.GetGenericArguments().FirstOrDefault() ?? throw new ValidationException($"Missing DbSet generic type");
-
-            var genericMethod = GetRunMethod(typeof(QueryExecutor), [genericType]);
-
             var queryable = dbSet?.GetType().GetMethod("AsQueryable")?.Invoke(dbSet, null);
-            return genericMethod?.Invoke(null, [queryable, query]) as IEnumerable<dynamic> ?? Array.Empty<dynamic>();
+
+            return InvokeRunMethod([genericType], [queryable, query]);
+
         }
 
         private static dynamic? ProjectField(object? obj, string field)
