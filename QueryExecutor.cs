@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+﻿using System.ComponentModel.DataAnnotations;
 using System.Globalization;
 using System.Linq.Expressions;
 using System.Reflection;
@@ -34,13 +34,15 @@ namespace Infragistics.QueryBuilder.Executor
             return db is not null ? BuildQuery<TSource, TTarget>(db, source, query, mapper).ToArray() : Array.Empty<object>();
         }
 
-        public static MethodInfo? GetGenericMethod(Type executorType, int attributeCount, Type[] genericArgs)
+        public static MethodInfo? GetRunMethod(Type executorType, Type[] genericArgs)
         {
-            var method = executorType
+            return executorType
                 .GetMethods(BindingFlags.Static | BindingFlags.Public)
-                .FirstOrDefault(m => m.CustomAttributes.Count() == attributeCount);
-
-            return method?.MakeGenericMethod(genericArgs);
+                .FirstOrDefault(m =>
+                    m.Name == "Run" &&
+                    m.IsGenericMethodDefinition &&
+                    m.GetGenericArguments().Length == genericArgs.Length)
+                ?.MakeGenericMethod(genericArgs);
         }
 
         private static IQueryable<object> BuildQuery<TSource, TTarget>(DbContext db, IQueryable<TSource> source, Query? query, IMapper? mapper = null)
@@ -232,23 +234,19 @@ namespace Infragistics.QueryBuilder.Executor
 
         private static IEnumerable<dynamic> RunSubquery(DbContext db, Query? query)
         {
-            var t = query?.Entity.ToLower(CultureInfo.InvariantCulture) ?? string.Empty;
-            var p = db.GetType().GetProperty(t, BindingFlags.IgnoreCase | BindingFlags.Public | BindingFlags.Instance) ?? throw new InvalidOperationException($"Property '{t}' not found on type '{db.GetType()}'");
+            var propName = query?.Entity.ToLower(CultureInfo.InvariantCulture) ?? string.Empty;
+            var prop = db.GetType().GetProperty(propName, BindingFlags.IgnoreCase | BindingFlags.Public | BindingFlags.Instance)
+                ?? throw new InvalidOperationException($"Property '{propName}' not found on type '{db.GetType()}'");
 
             var methods = typeof(QueryExecutor).GetMethods(BindingFlags.Static | BindingFlags.Public);
             var method = methods?.FirstOrDefault(m => m.CustomAttributes.Count() == 1);
-            var dbSet = p.GetValue(db);
-            var genericType = p.PropertyType.GetGenericArguments().FirstOrDefault();
+            var dbSet = prop.GetValue(db) ?? throw new ValidationException($"DbSet property '{prop.Name}' is null in DbContext.");
+            var genericType = prop.PropertyType.GetGenericArguments().FirstOrDefault() ?? throw new ValidationException($"Missing DbSet generic type");
 
-            if (dbSet != null && genericType != null)
-            {
+            var genericMethod = GetRunMethod(typeof(QueryExecutor), [genericType]);
 
-                var genericMethod = GetGenericMethod(typeof(QueryExecutor), 1, [genericType]);
-
-                var queryable = dbSet?.GetType().GetMethod("AsQueryable")?.Invoke(dbSet, null);
-                return genericMethod?.Invoke(null, [queryable, query]) as IEnumerable<dynamic> ?? Array.Empty<dynamic>();
-            }
-            return Enumerable.Empty<dynamic>();
+            var queryable = dbSet?.GetType().GetMethod("AsQueryable")?.Invoke(dbSet, null);
+            return genericMethod?.Invoke(null, [queryable, query]) as IEnumerable<dynamic> ?? Array.Empty<dynamic>();
         }
 
         private static dynamic? ProjectField(object? obj, string field)
@@ -269,10 +267,21 @@ namespace Infragistics.QueryBuilder.Executor
 
             if (nonNullableType.IsEnum)
             {
-                var enumValue = jsonVal.Deserialize<string>();
-                if (enumValue != null)
+                if (valueKind == JsonValueKind.String)
                 {
-                    return Expression.Constant(Enum.Parse(nonNullableType, enumValue));
+                    var enumValue = jsonVal.Deserialize<string>();
+                    if (enumValue != null)
+                    {
+                        return Expression.Constant(Enum.Parse(nonNullableType, enumValue));
+                    }
+                }
+                else if (valueKind == JsonValueKind.Number)
+                {
+                    var enumValue = jsonVal.Deserialize<int?>();
+                    if (enumValue != null)
+                    {
+                        return Expression.Constant(Enum.ToObject(nonNullableType, enumValue));
+                    }
                 }
             }
 

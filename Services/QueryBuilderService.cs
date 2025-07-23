@@ -1,8 +1,9 @@
-﻿using AutoMapper;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Logging;
+﻿using System.ComponentModel.DataAnnotations;
 using System.Globalization;
 using System.Reflection;
+using AutoMapper;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace Infragistics.QueryBuilder.Executor
 {
@@ -15,23 +16,27 @@ namespace Infragistics.QueryBuilder.Executor
             var t = query.Entity.ToLower(CultureInfo.InvariantCulture);
 
             var propInfo = db?.GetType().GetProperties()
-                .FirstOrDefault(p => p.PropertyType.IsGenericType && p.Name.ToLower(CultureInfo.InvariantCulture) == t && p.PropertyType.GetGenericTypeDefinition() == typeof(DbSet<>));
-            if (propInfo != null)
+                .FirstOrDefault(p =>
+                    p.PropertyType.IsGenericType &&
+                    p.Name.ToLower(CultureInfo.InvariantCulture) == t &&
+                    p.PropertyType.GetGenericTypeDefinition() == typeof(DbSet<>))
+                ?? throw new InvalidOperationException($"Unknown entity {t}");
+
+            var dbSet = propInfo.GetValue(db) ?? throw new ValidationException($"DbSet property '{propInfo.Name}' is null in DbContext.");
+            var dbGenericType = dbSet.GetType().GenericTypeArguments.FirstOrDefault() ?? throw new ValidationException($"Missing DbSet generic type");
+
+            var resultProperty = typeof(TResults).GetProperty(t, BindingFlags.Instance | BindingFlags.Public | BindingFlags.IgnoreCase)
+                ?? throw new ValidationException($"Unknown entity {t}");
+
+            var dtoGenericType = resultProperty.PropertyType.GetElementType() ?? throw new ValidationException($"Missing Dto generic type");
+
+            var genericMethod = QueryExecutor.GetRunMethod(typeof(QueryExecutor), [dbGenericType, dtoGenericType]);
+
+            var queryable = dbSet.GetType().GetMethod("AsQueryable")?.Invoke(dbSet, null)
+                ?? throw new InvalidOperationException($"DbSet '{propInfo.Name}' does not support AsQueryable().");
+            if ( genericMethod?.Invoke(null, [queryable, query, mapper]) is object[] propRes)
             {
-                var dbSet = propInfo.GetValue(db);
-                var dbGenericType = dbSet?.GetType()?.GenericTypeArguments.FirstOrDefault();
-                var dtoGenericType = typeof(TResults).GetProperty(propInfo.Name)?.PropertyType.GetElementType();
-
-                if (dbSet != null && dbGenericType != null && dtoGenericType != null)
-                {
-                    var genericMethod = QueryExecutor.GetGenericMethod(typeof(QueryExecutor), 2, [dbGenericType, dtoGenericType]);
-
-                    var queryable = dbSet.GetType().GetMethod("AsQueryable")?.Invoke(dbSet, null);
-                    if (queryable != null && genericMethod?.Invoke(null, [queryable, query, mapper]) is object[] propRes)
-                    {
-                        return new Dictionary<string, object[]> { { propInfo.Name.ToLowerInvariant(), propRes } };
-                    }
-                }
+                return new Dictionary<string, object[]> { { propInfo.Name.ToLowerInvariant(), propRes } };
             }
 
             throw new InvalidOperationException($"Unknown entity {t}");
