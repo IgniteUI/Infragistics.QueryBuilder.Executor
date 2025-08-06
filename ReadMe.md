@@ -1,6 +1,6 @@
 ﻿# Infragistics.QueryBuilder.Executor
 
-A .NET 9 library for dynamic, strongly-typed query building and execution over Entity Framework Core data sources. Supports advanced filtering, projection, and SQL generation.
+A .NET 8, .NET 9 library for dynamic, strongly-typed query building and execution over Entity Framework Core data sources. Supports advanced filtering, projection, and SQL generation.
 
 [![NuGet](https://img.shields.io/nuget/v/Infragistics.QueryBuilder.Executor.svg)](https://www.nuget.org/packages/Infragistics.QueryBuilder.Executor/)
 
@@ -61,9 +61,10 @@ In your `Startup.cs` or Program configuration:
 
 ## Dependencies
 
-- .NET 9
+- .NET 8 or .NET 9
 - Microsoft.EntityFrameworkCore
 - AutoMapper
+- builder.Services.AddControllers().AddNewtonsoftJson(o => o.SerializerSettings.ReferenceLoopHandling = ReferenceLoopHandling.Ignore) for working SwaggerUI
 
 ---
 
