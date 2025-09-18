@@ -34,7 +34,7 @@ namespace Infragistics.QueryBuilder.Executor
                 ?? throw new InvalidOperationException($"DbSet '{propInfo.Name}' does not support AsQueryable().");
 
             var propRes = QueryExecutor.InvokeRunMethod([dbGenericType, dtoGenericType], [queryable, query, mapper]);
-            return new Dictionary<string, object[]> { { propInfo.Name.ToLowerInvariant(), propRes } };
+            return new Dictionary<string, object[]> { { query.Entity, propRes } };
         }
     }
 }
