@@ -1,9 +1,4 @@
-﻿using AutoMapper;
-using AutoMapper.Internal;
-using AutoMapper.QueryableExtensions;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Infrastructure;
-using Swashbuckle.AspNetCore.SwaggerGen;
+﻿using System.ComponentModel.DataAnnotations;
 using System.Globalization;
 using System.Linq.Expressions;
 using System.Reflection;
@@ -11,6 +6,12 @@ using System.Reflection.Emit;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
+using AutoMapper;
+using AutoMapper.Internal;
+using AutoMapper.QueryableExtensions;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Swashbuckle.AspNetCore.SwaggerGen;
 
 namespace Infragistics.QueryBuilder.Executor
 {
@@ -31,6 +32,20 @@ namespace Infragistics.QueryBuilder.Executor
             var currentDbContext = serviceProvider.GetService(typeof(ICurrentDbContext)) as ICurrentDbContext;
             var db = currentDbContext!.Context;
             return db is not null ? BuildQuery<TSource, TTarget>(db, source, query, mapper).ToArray() : Array.Empty<object>();
+        }
+
+        public static object[] InvokeRunMethod(Type[] genericArgs, object?[] parameters)
+        {
+            var method = typeof(QueryExecutor)
+                .GetMethods(BindingFlags.Static | BindingFlags.Public)
+                .FirstOrDefault(m =>
+                    m.Name == "Run" &&
+                    m.IsGenericMethodDefinition &&
+                    m.GetGenericArguments().Length == genericArgs.Length)
+                ?.MakeGenericMethod(genericArgs);
+
+            var result = method?.Invoke(null, parameters) ?? Array.Empty<object>();
+            return (object[])result;
         }
 
         private static IQueryable<object> BuildQuery<TSource, TTarget>(DbContext db, IQueryable<TSource> source, Query? query, IMapper? mapper = null)
@@ -222,9 +237,18 @@ namespace Infragistics.QueryBuilder.Executor
 
         private static IEnumerable<dynamic> RunSubquery(DbContext db, Query? query)
         {
-            var t = query?.Entity.ToLower(CultureInfo.InvariantCulture) ?? string.Empty;
-            var p = db.GetType().GetProperty(t, BindingFlags.IgnoreCase | BindingFlags.Public | BindingFlags.Instance) ?? throw new InvalidOperationException($"Property '{t}' not found on type '{db.GetType()}'");
-            return p.GetValue(db) is not IQueryable<dynamic> q ? Array.Empty<dynamic>() : [.. q.Run(query)];
+            var propName = query?.Entity.ToLower(CultureInfo.InvariantCulture) ?? string.Empty;
+            var prop = db.GetType().GetProperty(propName, BindingFlags.IgnoreCase | BindingFlags.Public | BindingFlags.Instance)
+                ?? throw new InvalidOperationException($"Property '{propName}' not found on type '{db.GetType()}'");
+
+            var methods = typeof(QueryExecutor).GetMethods(BindingFlags.Static | BindingFlags.Public);
+            var method = methods?.FirstOrDefault(m => m.CustomAttributes.Count() == 1);
+            var dbSet = prop.GetValue(db) ?? throw new ValidationException($"DbSet property '{prop.Name}' is null in DbContext.");
+            var genericType = prop.PropertyType.GetGenericArguments().FirstOrDefault() ?? throw new ValidationException($"Missing DbSet generic type");
+            var queryable = dbSet?.GetType().GetMethod("AsQueryable")?.Invoke(dbSet, null);
+
+            return InvokeRunMethod([genericType], [queryable, query]);
+
         }
 
         private static dynamic? ProjectField(object? obj, string field)
@@ -242,12 +266,28 @@ namespace Infragistics.QueryBuilder.Executor
             }
 
             var nonNullableType = Nullable.GetUnderlyingType(targetType) ?? targetType;
-            var value = jsonVal.Deserialize(targetType);
 
-            if (nonNullableType.IsEnum && value is string)
+            if (nonNullableType.IsEnum)
             {
-                return Expression.Constant(Enum.Parse(nonNullableType, (string)value));
+                if (valueKind == JsonValueKind.String)
+                {
+                    var enumValue = jsonVal.Deserialize<string>();
+                    if (enumValue != null)
+                    {
+                        return Expression.Constant(Enum.Parse(nonNullableType, enumValue));
+                    }
+                }
+                else if (valueKind == JsonValueKind.Number)
+                {
+                    var enumValue = jsonVal.Deserialize<int?>();
+                    if (enumValue != null)
+                    {
+                        return Expression.Constant(Enum.ToObject(nonNullableType, enumValue));
+                    }
+                }
             }
+
+            var value = jsonVal.Deserialize(targetType);
 
             var convertedValue = Convert.ChangeType(value, nonNullableType, CultureInfo.InvariantCulture);
             return Expression.Constant(convertedValue, targetType);
