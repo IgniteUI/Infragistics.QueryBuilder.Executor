@@ -2,7 +2,7 @@
 
 namespace Infragistics.QueryBuilder.Executor
 {
-    public abstract class QueryFilter
+    public class QueryFilter
     {
         // Basic condition
         public string? FieldName { get; set; }
@@ -20,8 +20,4 @@ namespace Infragistics.QueryBuilder.Executor
 
         public QueryFilter[] FilteringOperands { get; set; }
     }
-
-    public class FilteringExpressionsTree : QueryFilter { }
-
-    public class FilteringExpression : QueryFilter { }
 }
