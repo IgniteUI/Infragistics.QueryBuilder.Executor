@@ -2,8 +2,19 @@ trigger:
   tags:
     include:
     - '*'
+  branches:
+    include:
+    - '*'
+
 # This pipeline is meant to build & deploy upon tagging. It's not meant to be a part of PR validation.
 pr: none
+
+# Enable manual trigger with parameter to skip publishing
+parameters:
+- name: skipPublish
+  displayName: 'Skip NuGet Publishing (for testing)'
+  type: boolean
+  default: true
 
 name: $(Build.SourceBranchName)_$(Year:yyyy).$(Month).$(DayOfMonth)$(Rev:.r)
 
@@ -65,7 +76,31 @@ stages:
         $dllFolder = "$(Build.SourcesDirectory)\bin\$(buildConfiguration)\net9.0"
         Write-Host "Signing DLLs in folder: $dllFolder"
 
-        $signtoolPath = "C:\Program Files (x86)\Windows Kits\10\bin\10.0.17763.0\x64\signtool.exe"
+        # Find the latest signtool.exe
+        Write-Host "##[section]Starting search for signtool.exe at $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss.fff')"
+        
+        $signtoolPath = $null
+        $searchPaths = @(
+          "C:\Program Files (x86)\Windows Kits\10\bin\*\x64\signtool.exe",
+          "C:\Program Files (x86)\Windows Kits\10\bin\*\x86\signtool.exe",
+          "C:\Program Files (x86)\Microsoft SDKs\Windows\*\bin\*\signtool.exe",
+          "C:\Program Files (x86)\Microsoft SDKs\Windows\*\bin\signtool.exe"
+        )
+        
+        foreach ($searchPath in $searchPaths) {
+          $foundPaths = Get-ChildItem -Path $searchPath -ErrorAction SilentlyContinue | Sort-Object -Property FullName -Descending
+          if ($foundPaths) {
+            $signtoolPath = $foundPaths[0].FullName
+            break
+          }
+        }
+        
+        if (-not $signtoolPath) {
+          Write-Error "signtool.exe not found in any of the well-known locations"
+          exit 1
+        }
+        
+        Write-Host "##[section]Found signtool.exe at $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss.fff')"
         Write-Host "Using signtool at: $signtoolPath"
 
         $dllFiles = Get-ChildItem -Path $dllFolder -Filter *.dll -Recurse
@@ -116,6 +151,7 @@ stages:
       displayName: 'Publish NuGet Package as Build Artifact'
 
     - task: NuGetCommand@2
+      condition: and(succeeded(), not(${{ parameters.skipPublish }}))
       inputs:
         command: 'push'
         packagesToPush: '$(Build.ArtifactStagingDirectory)/nuget/*.nupkg'
