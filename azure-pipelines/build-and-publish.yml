@@ -2,19 +2,8 @@ trigger:
   tags:
     include:
     - '*'
-  branches:
-    include:
-    - '*'
-
 # This pipeline is meant to build & deploy upon tagging. It's not meant to be a part of PR validation.
 pr: none
-
-# Enable manual trigger with parameter to skip publishing
-parameters:
-- name: skipPublish
-  displayName: 'Skip NuGet Publishing (for testing)'
-  type: boolean
-  default: true
 
 name: $(Build.SourceBranchName)_$(Year:yyyy).$(Month).$(DayOfMonth)$(Rev:.r)
 
@@ -27,7 +16,7 @@ variables:
 - name: buildConfiguration
   value: Release
 - name: releaseTag
-  value: '0.0.0.0'
+  value: $(Build.SourceBranchName)
 
 stages:
 - stage: BuildAndPublish
@@ -151,7 +140,6 @@ stages:
       displayName: 'Publish NuGet Package as Build Artifact'
 
     - task: NuGetCommand@2
-      condition: and(succeeded(), not(${{ parameters.skipPublish }}))
       inputs:
         command: 'push'
         packagesToPush: '$(Build.ArtifactStagingDirectory)/nuget/*.nupkg'
