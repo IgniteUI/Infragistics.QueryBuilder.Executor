@@ -65,7 +65,31 @@ stages:
         $dllFolder = "$(Build.SourcesDirectory)\bin\$(buildConfiguration)\net9.0"
         Write-Host "Signing DLLs in folder: $dllFolder"
 
-        $signtoolPath = "C:\Program Files (x86)\Windows Kits\10\bin\10.0.17763.0\x64\signtool.exe"
+        # Find the latest signtool.exe
+        Write-Host "##[section]Starting search for signtool.exe at $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss.fff')"
+        
+        $signtoolPath = $null
+        $searchPaths = @(
+          "C:\Program Files (x86)\Windows Kits\10\bin\*\x64\signtool.exe",
+          "C:\Program Files (x86)\Windows Kits\10\bin\*\x86\signtool.exe",
+          "C:\Program Files (x86)\Microsoft SDKs\Windows\*\bin\*\signtool.exe",
+          "C:\Program Files (x86)\Microsoft SDKs\Windows\*\bin\signtool.exe"
+        )
+        
+        foreach ($searchPath in $searchPaths) {
+          $foundPaths = Get-ChildItem -Path $searchPath -ErrorAction SilentlyContinue | Sort-Object -Property FullName -Descending
+          if ($foundPaths) {
+            $signtoolPath = $foundPaths[0].FullName
+            break
+          }
+        }
+        
+        if (-not $signtoolPath) {
+          Write-Error "signtool.exe not found in any of the well-known locations"
+          exit 1
+        }
+        
+        Write-Host "##[section]Found signtool.exe at $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss.fff')"
         Write-Host "Using signtool at: $signtoolPath"
 
         $dllFiles = Get-ChildItem -Path $dllFolder -Filter *.dll -Recurse
