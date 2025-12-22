@@ -257,8 +257,14 @@ namespace Infragistics.QueryBuilder.Executor
             return property.GetMemberValue(obj);
         }
 
-        private static Expression GetSearchValue(JsonValue? jsonVal, Type targetType)
+        private static Expression GetSearchValue(object? searchValue, Type targetType)
         {
+            if (searchValue == null)
+            {
+                return GetEmptyValue(targetType);
+            }
+
+            var jsonVal = JsonValue.Create(searchValue);
             var valueKind = jsonVal?.GetValueKind();
             if (valueKind == null || valueKind == JsonValueKind.Null || valueKind == JsonValueKind.Undefined)
             {

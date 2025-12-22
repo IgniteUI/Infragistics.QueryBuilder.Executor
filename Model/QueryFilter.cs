@@ -1,6 +1,4 @@
-﻿using System.Text.Json.Nodes;
-
-namespace Infragistics.QueryBuilder.Executor
+﻿namespace Infragistics.QueryBuilder.Executor
 {
     public class QueryFilter
     {
@@ -11,7 +9,7 @@ namespace Infragistics.QueryBuilder.Executor
 
         public QueryFilterCondition? Condition { get; set; }
 
-        public JsonValue? SearchVal { get; set; }
+        public object? SearchVal { get; set; }
 
         public Query? SearchTree { get; set; }
 
