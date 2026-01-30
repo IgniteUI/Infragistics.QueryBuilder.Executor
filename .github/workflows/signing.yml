@@ -1,9 +1,6 @@
 name: Build and Publish
 
 on:
-  push:
-    tags:
-      - '*'
   workflow_dispatch:
   
 env:
@@ -124,8 +121,8 @@ jobs:
       - name: Sign NuGet package
         shell: pwsh
         env:
-          CERT_PASS: ${{ secrets.SIGNING_CERTIFICATE_PASSWORD }}
-          TIMESTAMP_URL: ${{ vars.SIGNING_CERTIFICATE_TIMESTAMP_URL }}
+          SIGNING_CERTIFICATE_PASSWORD: ${{ secrets.SIGNING_CERTIFICATE_PASSWORD }}
+          SIGNING_CERTIFICATE_TIMESTAMP_URL: ${{ vars.SIGNING_CERTIFICATE_TIMESTAMP_URL }}
         run: |
           $certPath = "${{ runner.temp }}\certificate.pfx"
           $nupkgPath = "${{ github.workspace }}\nupkg\*.nupkg"
@@ -142,13 +139,6 @@ jobs:
         id: nuget-login
         with:
           user: ${{ secrets.NUGET_ORG_USER }}
-
-      - name: Publish to NuGet.org
-        if: false  # This step will never run
-        run: |
-          dotnet nuget push "${{ github.workspace }}\nupkg\*.nupkg" `
-            --api-key ${{ steps.nuget-login.outputs.nuget-api-key }} `
-            --source https://api.nuget.org/v3/index.json
 
       - name: Clean up certificate
         if: always()
