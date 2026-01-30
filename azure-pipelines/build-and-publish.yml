@@ -49,17 +49,16 @@ stages:
           -c $(buildConfiguration)
           /p:Version=$(releaseTag)
 
-    - powershell: |
-        $outputDir = "$(Build.SourcesDirectory)\bin\$(buildConfiguration)\net9.0"
-        Write-Host "Listing contents of: $outputDir"
-        if (-Not (Test-Path $outputDir)) {
-          Write-Error "Output folder not found: $outputDir"
-          exit 1
-        }
-        Get-ChildItem $outputDir -Recurse | ForEach-Object {
-          Write-Host $_.FullName
-        }
-      displayName: 'Debug: List build output contents'
+    - name: Setup Code Signing Certificate
+      if: ${{ inputs.enable-code-signing == 'true' }}
+      run: |
+        Write-Host "Setting up code signing certificate from GitHub secrets..."
+
+        # Create certificate file from secret (base64 encoded)
+        $certBytes = [Convert]::FromBase64String("${{ env.SIGNING_CERTIFICATE_2023_2026 }}")
+        [System.IO.File]::WriteAllBytes("${{ github.workspace }}/code-signing-reissue-2023-2026.pfx", $certBytes)
+        Write-Host "Certificate file created from GitHub secret"
+      shell: pwsh
 
     - powershell: |
         $dllFolder = "$(Build.SourcesDirectory)\bin\$(buildConfiguration)\net9.0"
@@ -95,7 +94,7 @@ stages:
         $dllFiles = Get-ChildItem -Path $dllFolder -Filter *.dll -Recurse
         foreach ($dll in $dllFiles) {
           Write-Host "Signing $($dll.FullName)..."
-          & $signtoolPath sign /f $(cert.secureFilePath) /p $env:CERT_PASS /tr $(SigningCertificateTimestampUrl) /td sha256 /fd sha256 $dll.FullName
+          & $signtoolPath sign /f ${{ github.workspace }}/code-signing-reissue-2023-2026.pfx /p ${{ secrets.SIGNING_CERTIFICATE_PASSWORD }} /tr ${{ secrets.SIGNING_CERTIFICATE_TIMESTAMP_URL }} /td sha256 /fd sha256 $dll.FullName
 
           if ($LASTEXITCODE -ne 0) {
             Write-Error "Signing failed for $($dll.FullName)"
@@ -130,7 +129,7 @@ stages:
       inputs:
         targetType: 'inline'
         script: |
-          nuget.exe sign $(Build.ArtifactStagingDirectory)\nuget\*.nupkg -CertificatePath $(cert.secureFilePath) -CertificatePassword $env:CERT_PASS -Timestamper $(SigningCertificateTimestampUrl)
+          nuget.exe sign $(Build.ArtifactStagingDirectory)\nuget\*.nupkg -CertificatePath ${{ github.workspace }}/code-signing-reissue-2023-2026.pfx -CertificatePassword ${{ secrets.SIGNING_CERTIFICATE_PASSWORD }} -Timestamper ${{ secrets.SIGNING_CERTIFICATE_TIMESTAMP_URL }}
 
     - task: PublishBuildArtifacts@1
       inputs:
