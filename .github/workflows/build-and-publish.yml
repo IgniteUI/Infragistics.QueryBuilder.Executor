@@ -1,0 +1,135 @@
+name: Build and Publish
+
+on:
+  push:
+    tags:
+      - '*'
+
+env:
+  BUILD_CONFIGURATION: Release
+  DOTNET_VERSION: '9.x'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Get version from tag
+        id: version
+        run: |
+          VERSION="${{ github.ref_name }}"
+          echo "Version: $VERSION"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Build
+        run: |
+          dotnet build Infragistics.QueryBuilder.Executor.csproj \
+            -c ${{ env.BUILD_CONFIGURATION }} \
+            /p:Version=${{ steps.version.outputs.version }}
+
+      - name: Upload entire bin directory
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-output
+          path: bin/
+          retention-days: 1
+
+  sign-dlls:
+    needs: build
+    uses: IgniteUI/igniteui-actions/.github/workflows/sign-dlls.yml@master
+    with:
+      artifact-name: build-output
+      signed-artifact-name: signed-build-output
+    secrets: inherit
+
+  pack:
+    needs: [build, sign-dlls]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Download signed build output
+        uses: actions/download-artifact@v4
+        with:
+          name: signed-build-output
+          path: bin/
+
+      - name: Debug - List restored bin directory
+        run: |
+          echo "Contents of bin/:"
+          find bin/ -type f | sort
+
+      - name: Pack NuGet package
+        run: |
+          VERSION="${{ needs.build.outputs.version }}"
+          echo "Packing version: $VERSION"
+          
+          dotnet pack Infragistics.QueryBuilder.Executor.csproj \
+            --no-build \
+            --configuration ${{ env.BUILD_CONFIGURATION }} \
+            -p:PackageVersion="$VERSION" \
+            -o ./nupkg
+
+      - name: Upload unsigned NuGet package
+        uses: actions/upload-artifact@v4
+        with:
+          name: unsigned-nuget
+          path: ./nupkg/*.nupkg
+          retention-days: 1
+
+  sign-nuget:
+    needs: pack
+    uses: IgniteUI/igniteui-actions/.github/workflows/sign-nuget-package.yml@master
+    with:
+      artifact-name: unsigned-nuget
+      signed-artifact-name: signed-nuget
+    secrets: inherit
+
+  publish:
+    needs: [build, sign-nuget]
+    runs-on: ubuntu-latest
+    environment: nuget-publish
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Download signed NuGet package
+        uses: actions/download-artifact@v4
+        with:
+          name: signed-nuget
+          path: ./packages
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: NuGet login (OIDC → temp API key)
+        uses: nuget/login@v1
+        id: nuget-login
+        with:
+          user: ${{ secrets.INFRAGISTICS_NUGET_ORG_USER }}
+
+      - name: Publish to NuGet.org
+        run: |
+          VERSION="${{ needs.build.outputs.version }}"
+          dotnet nuget push ./packages/Infragistics.QueryBuilder.Executor.${VERSION}.nupkg \
+            --api-key ${{ steps.nuget-login.outputs.nuget-api-key }} \
+            --source https://api.nuget.org/v3/index.json
