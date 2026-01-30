@@ -144,13 +144,6 @@ jobs:
             --timestamper $env:TIMESTAMP_URL `
             --overwrite
 
-      - name: Upload NuGet package artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: NuGetPackage
-          path: ${{ github.workspace }}/nupkg/*.nupkg
-          retention-days: 5
-
       - name: NuGet login (OIDC Trusted Publishing)
         uses: nuget/login@v1
         id: nuget-login
