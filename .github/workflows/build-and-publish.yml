@@ -53,6 +53,7 @@ jobs:
         shell: pwsh
 
       - name: Sign all DLL files
+        if: false  # This step will never run
         shell: pwsh
         env:
           CERT_PASS: ${{ secrets.SIGNING_CERTIFICATE_PASSWORD }}
