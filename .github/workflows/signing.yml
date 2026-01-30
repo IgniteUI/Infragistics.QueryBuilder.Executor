@@ -47,8 +47,8 @@ jobs:
 
           # Create certificate file from secret (base64 encoded)
           $certBytes = [Convert]::FromBase64String("${{ secrets.SIGNING_CERTIFICATE_2023_2026 }}")
-          [System.IO.File]::WriteAllBytes("${{ runner.temp }}\certificate.pfx", $certBytes)
-           Write-Host "Certificate written to: $certPath"
+          [System.IO.File]::WriteAllBytes("${{ github.workspace }}/code-signing-reissue-2023-2026.pfx", $certBytes)
+          Write-Host "Certificate file created from GitHub secret"
         shell: pwsh
 
       - name: Verify NuGet sign capability
@@ -74,7 +74,7 @@ jobs:
           TIMESTAMP_URL: ${{ vars.SIGNING_CERTIFICATE_TIMESTAMP_URL }}
         run: |
           $dllFolder = "${{ github.workspace }}\bin\${{ env.BUILD_CONFIGURATION }}\net9.0"
-          $certPath = "${{ runner.temp }}\certificate.pfx"
+          $certPath = "${{ github.workspace }}/code-signing-reissue-2023-2026.pfx"
           Write-Host "Signing DLLs in folder: $dllFolder"
 
           # Find the latest signtool.exe
@@ -134,14 +134,15 @@ jobs:
           }
 
       - name: Sign NuGet package (using nuget cli)
+        continue-on-error: true
         shell: pwsh
         env:
           SIGNING_CERTIFICATE_PASSWORD: ${{ secrets.SIGNING_CERTIFICATE_PASSWORD }}
           SIGNING_CERTIFICATE_TIMESTAMP_URL: ${{ vars.SIGNING_CERTIFICATE_TIMESTAMP_URL }}
         run: |
-          $certPath = "${{ runner.temp }}\certificate.pfx"
+          $certPath = "${{ github.workspace }}/code-signing-reissue-2023-2026.pfx"
           $nupkgPath = "${{ github.workspace }}\nupkg\*.nupkg"
-          nuget sign $nupkgPath -CertificatePath $certPath -CertificatePassword "$env:SIGNING_CERTIFICATE_PASSWORD" -Timestamper "$env:SIGNING_CERTIFICATE_TIMESTAMP_URL"
+          nuget sign $nupkgPath -CertificatePath $certPath -CertificatePassword "$env:SIGNING_CERTIFICATE_PASSWORD" -Timestamper "$env:SIGNING_CERTIFICATE_TIMESTAMP_URL" -Verbosity detailed
           Write-Host "Package signing completed"
 
       - name: Sign NuGet package (using dotnet nuget sign)
@@ -150,14 +151,15 @@ jobs:
           SIGNING_CERTIFICATE_PASSWORD: ${{ secrets.SIGNING_CERTIFICATE_PASSWORD }}
           SIGNING_CERTIFICATE_TIMESTAMP_URL: ${{ vars.SIGNING_CERTIFICATE_TIMESTAMP_URL }}
         run: |
-          $certPath = "${{ runner.temp }}\certificate.pfx"
+          $certPath = "${{ github.workspace }}/code-signing-reissue-2023-2026.pfx"
           $nupkgPath = "${{ github.workspace }}\nupkg\*.nupkg"
           
           dotnet nuget sign $nupkgPath `
             --certificate-path $certPath `
             --certificate-password "$env:SIGNING_CERTIFICATE_PASSWORD" `
             --timestamper "$env:SIGNING_CERTIFICATE_TIMESTAMP_URL" `
-            --overwrite
+            --overwrite `
+            --verbosity detailed
 
       - name: NuGet login (OIDC Trusted Publishing)
         uses: nuget/login@v1
@@ -169,7 +171,7 @@ jobs:
         if: always()
         shell: pwsh
         run: |
-          $certPath = "${{ runner.temp }}\certificate.pfx"
+          $certPath = "${{ github.workspace }}/code-signing-reissue-2023-2026.pfx"
           if (Test-Path $certPath) {
             Remove-Item $certPath -Force
             Write-Host "Certificate cleaned up"
