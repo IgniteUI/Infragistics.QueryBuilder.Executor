@@ -141,7 +141,7 @@ jobs:
         run: |
           $certPath = "${{ runner.temp }}\certificate.pfx"
           $nupkgPath = "${{ github.workspace }}\nupkg\*.nupkg"
-          nuget sign -CertificatePath $certPath -CertificatePassword "$env:SIGNING_CERTIFICATE_PASSWORD" -Timestamper "$env:SIGNING_CERTIFICATE_TIMESTAMP_URL"
+          nuget sign $nupkgPath -CertificatePath $certPath -CertificatePassword "$env:SIGNING_CERTIFICATE_PASSWORD" -Timestamper "$env:SIGNING_CERTIFICATE_TIMESTAMP_URL"
           Write-Host "Package signing completed"
 
       - name: Sign NuGet package (using dotnet nuget sign)
