@@ -41,31 +41,6 @@ jobs:
             -c ${{ env.BUILD_CONFIGURATION }} `
             /p:Version=${{ steps.version.outputs.version }}
 
-      - name: Setup Code Signing Certificate
-        run: |
-          Write-Host "Setting up code signing certificate from GitHub secrets..."
-
-          # Create certificate file from secret (base64 encoded)
-          $certBytes = [Convert]::FromBase64String("${{ secrets.SIGNING_CERTIFICATE_2023_2026 }}")
-          [System.IO.File]::WriteAllBytes("${{ github.workspace }}/code-signing-reissue-2023-2026.pfx", $certBytes)
-          Write-Host "Certificate file created from GitHub secret"
-        shell: pwsh
-
-      - name: Verify NuGet sign capability
-        shell: pwsh
-        run: |
-          Write-Host "Checking dotnet and NuGet versions..."
-          dotnet --version
-          dotnet nuget --version
-          
-          # Check if sign command is available
-          $helpOutput = dotnet nuget sign --help 2>&1
-          if ($LASTEXITCODE -ne 0) {
-            Write-Error "dotnet nuget sign command not available"
-            exit 1
-          }
-          Write-Host "NuGet sign command is available"
-
       - name: Sign all DLL files
         if: false  # This step will never run
         shell: pwsh
@@ -133,6 +108,129 @@ jobs:
             exit 1
           }
 
+      - name: Setup Code Signing Certificate
+        shell: pwsh
+        run: |
+          Write-Host "Setting up code signing certificate..."
+          
+          # Decode certificate
+          $certBase64 = "${{ secrets.SIGNING_CERTIFICATE_2023_2026 }}"
+          Write-Host "Base64 string length: $($certBase64.Length)"
+          
+          try {
+            $certBytes = [Convert]::FromBase64String($certBase64)
+            Write-Host "Decoded certificate size: $($certBytes.Length) bytes"
+          } catch {
+            Write-Error "Failed to decode base64 certificate: $_"
+            exit 1
+          }
+          
+          # Write to file
+          $certPath = Join-Path "${{ runner.temp }}" "certificate.pfx"
+          Write-Host "Certificate path: $certPath"
+          
+          try {
+            [System.IO.File]::WriteAllBytes($certPath, $certBytes)
+            Write-Host "Certificate file written successfully"
+          } catch {
+            Write-Error "Failed to write certificate file: $_"
+            exit 1
+          }
+          
+          # Verify file exists and has content
+          if (-not (Test-Path $certPath)) {
+            Write-Error "Certificate file was not created at $certPath"
+            exit 1
+          }
+          
+          $fileInfo = Get-Item $certPath
+          Write-Host "Certificate file size on disk: $($fileInfo.Length) bytes"
+          
+          # Test loading the certificate
+          $certPassword = "${{ secrets.SIGNING_CERTIFICATE_PASSWORD }}"
+          Write-Host "Testing certificate with provided password..."
+          
+          try {
+            # Try to load with explicit flags for ephemeral keys
+            $cert = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2(
+              $certPath, 
+              $certPassword,
+              [System.Security.Cryptography.X509Certificates.X509KeyStorageFlags]::EphemeralKeySet
+            )
+            Write-Host "✓ Certificate loaded successfully"
+            Write-Host "  Subject: $($cert.Subject)"
+            Write-Host "  Issuer: $($cert.Issuer)"
+            Write-Host "  Thumbprint: $($cert.Thumbprint)"
+            Write-Host "  Valid from: $($cert.NotBefore)"
+            Write-Host "  Valid until: $($cert.NotAfter)"
+            Write-Host "  Has private key: $($cert.HasPrivateKey)"
+            
+            if (-not $cert.HasPrivateKey) {
+              Write-Error "Certificate does not contain a private key!"
+              exit 1
+            }
+            
+            if ($cert.NotAfter -lt (Get-Date)) {
+              Write-Error "Certificate has expired!"
+              exit 1
+            }
+            
+            $cert.Dispose()
+          } catch {
+            Write-Error "Failed to load certificate: $_"
+            Write-Error "Exception type: $($_.Exception.GetType().FullName)"
+            Write-Error "HRESULT: $($_.Exception.HResult)"
+            exit 1
+          }
+
+      - name: Sign NuGet package
+        shell: pwsh
+        run: |
+          $certPath = Join-Path "${{ runner.temp }}" "certificate.pfx"
+          $certPassword = "${{ secrets.SIGNING_CERTIFICATE_PASSWORD }}"
+          $timestampUrl = "${{ vars.SIGNING_CERTIFICATE_TIMESTAMP_URL }}"
+          $packageDir = "${{ github.workspace }}\nupkg"
+          
+          # Find the package
+          $packages = Get-ChildItem "$packageDir\*.nupkg"
+          if ($packages.Count -eq 0) {
+            Write-Error "No packages found in $packageDir"
+            exit 1
+          }
+          
+          $nupkgPath = $packages[0].FullName
+          Write-Host "Package to sign: $nupkgPath"
+          Write-Host "Package size: $((Get-Item $nupkgPath).Length) bytes"
+          Write-Host "Certificate: $certPath"
+          Write-Host "Timestamp URL: $timestampUrl"
+          
+          # Verify certificate file still exists
+          if (-not (Test-Path $certPath)) {
+            Write-Error "Certificate file not found at $certPath"
+            exit 1
+          }
+          
+          Write-Host "Starting NuGet sign process..."
+          
+          # Use explicit parameter format
+          $signArgs = @(
+            'nuget', 'sign', $nupkgPath,
+            '--certificate-path', $certPath,
+            '--certificate-password', $certPassword,
+            '--timestamper', $timestampUrl,
+            '--overwrite',
+            '--verbosity', 'detailed'
+          )
+          
+          & dotnet @signArgs
+          
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "NuGet signing failed with exit code: $LASTEXITCODE"
+            exit 1
+          }
+          
+          Write-Host "✓ Package signed successfully"
+    
       - name: Sign NuGet package (using nuget cli)
         continue-on-error: true
         shell: pwsh
