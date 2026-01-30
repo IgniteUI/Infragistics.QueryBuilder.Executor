@@ -47,11 +47,30 @@ jobs:
       - name: Setup Code Signing Certificate
         run: |
           Write-Host "Setting up code signing certificate from GitHub secrets..."
-
+      
           # Create certificate file from secret (base64 encoded)
           $certBytes = [Convert]::FromBase64String("${{ secrets.SIGNING_CERTIFICATE_2023_2026 }}")
-          [System.IO.File]::WriteAllBytes("${{ runner.temp }}\certificate.pfx", $certBytes)
-           Write-Host "Certificate written to: $certPath"
+          $certPath = "${{ runner.temp }}\certificate.pfx"
+          [System.IO.File]::WriteAllBytes($certPath, $certBytes)
+          Write-Host "Certificate written to: $certPath"
+          Write-Host "Certificate file size: $($certBytes.Length) bytes"
+          
+          # Validate certificate can be loaded
+          try {
+            $cert = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2($certPath, "${{ secrets.SIGNING_CERTIFICATE_PASSWORD }}")
+            Write-Host "Certificate loaded successfully"
+            Write-Host "Subject: $($cert.Subject)"
+            Write-Host "Thumbprint: $($cert.Thumbprint)"
+            Write-Host "Valid from: $($cert.NotBefore) to $($cert.NotAfter)"
+            
+            if ($cert.NotAfter -lt (Get-Date)) {
+              Write-Error "Certificate has expired!"
+              exit 1
+            }
+          } catch {
+            Write-Error "Failed to load certificate: $_"
+            exit 1
+          }
         shell: pwsh
 
       - name: Sign all DLL files
@@ -121,20 +140,57 @@ jobs:
             exit 1
           }
 
+      - name: Verify NuGet sign capability
+        shell: pwsh
+        run: |
+          Write-Host "Checking dotnet and NuGet versions..."
+          dotnet --version
+          dotnet nuget --version
+          
+          # Check if sign command is available
+          $helpOutput = dotnet nuget sign --help 2>&1
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "dotnet nuget sign command not available"
+            exit 1
+          }
+          Write-Host "NuGet sign command is available"          
+
       - name: Sign NuGet package
         shell: pwsh
-        env:
-          CERT_PASS: ${{ secrets.SIGNING_CERTIFICATE_PASSWORD }}
-          TIMESTAMP_URL: ${{ vars.SIGNING_CERTIFICATE_TIMESTAMP_URL }}
         run: |
+          $packageOutputDir = "${{ github.workspace }}\nupkg"
+          $packages = Get-ChildItem "$packageOutputDir\*.nupkg"
+          
+          if ($packages.Count -eq 0) {
+            Write-Error "No NuGet packages found in $packageOutputDir"
+            exit 1
+          }
+          
+          Write-Host "Found $($packages.Count) package(s) to sign:"
+          foreach ($pkg in $packages) {
+            Write-Host "  - $($pkg.Name) ($($pkg.Length) bytes)"
+          }
+          
+          $nupkgPath = $packages[0].FullName
           $certPath = "${{ runner.temp }}\certificate.pfx"
-          $nupkgPath = "${{ github.workspace }}\nupkg\*.nupkg"
+          $certPassword = "${{ secrets.SIGNING_CERTIFICATE_PASSWORD }}"
+          $timestampUrl = "${{ vars.SIGNING_CERTIFICATE_TIMESTAMP_URL }}"
+          
+          Write-Host "Signing: $nupkgPath"
           
           dotnet nuget sign $nupkgPath `
             --certificate-path $certPath `
-            --certificate-password "$env:SIGNING_CERTIFICATE_PASSWORD" `
-            --timestamper "$env:SIGNING_CERTIFICATE_TIMESTAMP_URL" `
-            --overwrite
+            --certificate-password $certPassword `
+            --timestamper $timestampUrl `
+            --overwrite `
+            --verbosity detailed
+          
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "NuGet signing failed with exit code $LASTEXITCODE"
+            exit 1
+          }
+          
+          Write-Host "Package signed successfully"
 
 
       - name: NuGet login (OIDC Trusted Publishing)
