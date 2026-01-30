@@ -1,0 +1,151 @@
+name: Build and Publish
+
+on:
+  workflow_dispatch:
+  
+env:
+  BUILD_CONFIGURATION: Release
+  DOTNET_VERSION: '9.x'
+
+jobs:
+  build-sign-publish:
+    runs-on: windows-latest
+    environment: nuget-org-publish
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Get version from tag
+        id: version
+        shell: pwsh
+        run: |
+          $version = "${{ github.ref_name }}"
+          $version = "99.99.99"
+          Write-Host "Version: $version"
+          echo "version=$version" >> $env:GITHUB_OUTPUT
+
+      - name: Build
+        run: |
+          dotnet build Infragistics.QueryBuilder.Executor.csproj `
+            -c ${{ env.BUILD_CONFIGURATION }} `
+            /p:Version=${{ steps.version.outputs.version }}
+
+      - name: Setup Code Signing Certificate
+        run: |
+          Write-Host "Setting up code signing certificate from GitHub secrets..."
+
+          # Create certificate file from secret (base64 encoded)
+          $certBytes = [Convert]::FromBase64String("${{ secrets.SIGNING_CERTIFICATE_2023_2026 }}")
+          [System.IO.File]::WriteAllBytes("${{ runner.temp }}\certificate.pfx", $certBytes)
+           Write-Host "Certificate written to: $certPath"
+        shell: pwsh
+
+      - name: Sign all DLL files
+        if: false  # This step will never run
+        shell: pwsh
+        env:
+          CERT_PASS: ${{ secrets.SIGNING_CERTIFICATE_PASSWORD }}
+          TIMESTAMP_URL: ${{ vars.SIGNING_CERTIFICATE_TIMESTAMP_URL }}
+        run: |
+          $dllFolder = "${{ github.workspace }}\bin\${{ env.BUILD_CONFIGURATION }}\net9.0"
+          $certPath = "${{ runner.temp }}\certificate.pfx"
+          Write-Host "Signing DLLs in folder: $dllFolder"
+
+          # Find the latest signtool.exe
+          Write-Host "##[section]Starting search for signtool.exe at $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss.fff')"
+          
+          $signtoolPath = $null
+          $searchPaths = @(
+            "C:\Program Files (x86)\Windows Kits\10\bin\*\x64\signtool.exe",
+            "C:\Program Files (x86)\Windows Kits\10\bin\*\x86\signtool.exe",
+            "C:\Program Files (x86)\Microsoft SDKs\Windows\*\bin\*\signtool.exe",
+            "C:\Program Files (x86)\Microsoft SDKs\Windows\*\bin\signtool.exe"
+          )
+          
+          foreach ($searchPath in $searchPaths) {
+            $foundPaths = Get-ChildItem -Path $searchPath -ErrorAction SilentlyContinue | Sort-Object -Property FullName -Descending
+            if ($foundPaths) {
+              $signtoolPath = $foundPaths[0].FullName
+              break
+            }
+          }
+          
+          if (-not $signtoolPath) {
+            Write-Error "signtool.exe not found in any of the well-known locations"
+            exit 1
+          }
+          
+          Write-Host "##[section]Found signtool.exe at $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss.fff')"
+          Write-Host "Using signtool at: $signtoolPath"
+
+          $dllFiles = Get-ChildItem -Path $dllFolder -Filter *.dll -Recurse
+          foreach ($dll in $dllFiles) {
+            Write-Host "Signing $($dll.FullName)..."
+            & $signtoolPath sign /f $certPath /p $env:CERT_PASS /tr $env:TIMESTAMP_URL /td sha256 /fd sha256 $dll.FullName
+
+            if ($LASTEXITCODE -ne 0) {
+              Write-Error "Signing failed for $($dll.FullName)"
+              exit 1
+            }
+          }
+
+      - name: Pack NuGet package
+        shell: pwsh
+        run: |
+          $packageOutputDir = "${{ github.workspace }}\nupkg"
+          $packageVersion = "${{ steps.version.outputs.version }}"
+
+          Write-Host "Packing project from existing build output..."
+          dotnet pack ./Infragistics.QueryBuilder.Executor.csproj `
+            --no-build `
+            --configuration ${{ env.BUILD_CONFIGURATION }} `
+            -p:PackageVersion=$packageVersion `
+            -o $packageOutputDir
+
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "dotnet pack failed"
+            exit 1
+          }
+
+      - name: Sign NuGet package
+        shell: pwsh
+        env:
+          SIGNING_CERTIFICATE_PASSWORD: ${{ secrets.SIGNING_CERTIFICATE_PASSWORD }}
+          SIGNING_CERTIFICATE_TIMESTAMP_URL: ${{ vars.SIGNING_CERTIFICATE_TIMESTAMP_URL }}
+        run: |
+          $certPath = "${{ runner.temp }}\certificate.pfx"
+          $nupkgPath = "${{ github.workspace }}\nupkg\*.nupkg"
+          
+          dotnet nuget sign $nupkgPath `
+            --certificate-path $certPath `
+            --certificate-password "$env:SIGNING_CERTIFICATE_PASSWORD" `
+            --timestamper "$env:SIGNING_CERTIFICATE_TIMESTAMP_URL" `
+            --overwrite
+
+
+      - name: NuGet login (OIDC Trusted Publishing)
+        uses: nuget/login@v1
+        id: nuget-login
+        with:
+          user: ${{ secrets.NUGET_ORG_USER }}
+
+      - name: Clean up certificate
+        if: always()
+        shell: pwsh
+        run: |
+          $certPath = "${{ runner.temp }}\certificate.pfx"
+          if (Test-Path $certPath) {
+            Remove-Item $certPath -Force
+            Write-Host "Certificate cleaned up"
+          }
