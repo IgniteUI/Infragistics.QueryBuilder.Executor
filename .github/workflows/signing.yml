@@ -51,6 +51,21 @@ jobs:
            Write-Host "Certificate written to: $certPath"
         shell: pwsh
 
+      - name: Verify NuGet sign capability
+        shell: pwsh
+        run: |
+          Write-Host "Checking dotnet and NuGet versions..."
+          dotnet --version
+          dotnet nuget --version
+          
+          # Check if sign command is available
+          $helpOutput = dotnet nuget sign --help 2>&1
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "dotnet nuget sign command not available"
+            exit 1
+          }
+          Write-Host "NuGet sign command is available"
+
       - name: Sign all DLL files
         if: false  # This step will never run
         shell: pwsh
@@ -118,7 +133,18 @@ jobs:
             exit 1
           }
 
-      - name: Sign NuGet package
+      - name: Sign NuGet package (using nuget cli)
+        shell: pwsh
+        env:
+          SIGNING_CERTIFICATE_PASSWORD: ${{ secrets.SIGNING_CERTIFICATE_PASSWORD }}
+          SIGNING_CERTIFICATE_TIMESTAMP_URL: ${{ vars.SIGNING_CERTIFICATE_TIMESTAMP_URL }}
+        run: |
+          $certPath = "${{ runner.temp }}\certificate.pfx"
+          $nupkgPath = "${{ github.workspace }}\nupkg\*.nupkg"
+          nuget sign -CertificatePath $certPath -CertificatePassword "$env:SIGNING_CERTIFICATE_PASSWORD" -Timestamper "$env:SIGNING_CERTIFICATE_TIMESTAMP_URL"
+          Write-Host "Package signing completed"
+
+      - name: Sign NuGet package (using dotnet nuget sign)
         shell: pwsh
         env:
           SIGNING_CERTIFICATE_PASSWORD: ${{ secrets.SIGNING_CERTIFICATE_PASSWORD }}
@@ -132,7 +158,6 @@ jobs:
             --certificate-password "$env:SIGNING_CERTIFICATE_PASSWORD" `
             --timestamper "$env:SIGNING_CERTIFICATE_TIMESTAMP_URL" `
             --overwrite
-
 
       - name: NuGet login (OIDC Trusted Publishing)
         uses: nuget/login@v1
