@@ -42,26 +42,15 @@ jobs:
             -c ${{ env.BUILD_CONFIGURATION }} `
             /p:Version=${{ steps.version.outputs.version }}
 
-      - name: Debug - List build output contents
-        shell: pwsh
+      - name: Setup Code Signing Certificate
         run: |
-          $outputDir = "${{ github.workspace }}\bin\${{ env.BUILD_CONFIGURATION }}\net9.0"
-          Write-Host "Listing contents of: $outputDir"
-          if (-Not (Test-Path $outputDir)) {
-            Write-Error "Output folder not found: $outputDir"
-            exit 1
-          }
-          Get-ChildItem $outputDir -Recurse | ForEach-Object {
-            Write-Host $_.FullName
-          }
+          Write-Host "Setting up code signing certificate from GitHub secrets..."
 
-      - name: Decode signing certificate
-        shell: pwsh
-        run: |
+          # Create certificate file from secret (base64 encoded)
           $certBytes = [Convert]::FromBase64String("${{ secrets.SIGNING_CERTIFICATE_2023_2026 }}")
-          $certPath = "${{ runner.temp }}\certificate.pfx"
-          [IO.File]::WriteAllBytes($certPath, $certBytes)
-          Write-Host "Certificate written to: $certPath"
+          [System.IO.File]::WriteAllBytes("${{ runner.temp }}\certificate.pfx", $certBytes)
+           Write-Host "Certificate written to: $certPath"
+        shell: pwsh
 
       - name: Sign all DLL files
         shell: pwsh
