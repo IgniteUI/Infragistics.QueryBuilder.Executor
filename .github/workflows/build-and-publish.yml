@@ -58,7 +58,7 @@ jobs:
       - name: Decode signing certificate
         shell: pwsh
         run: |
-          $certBytes = [Convert]::FromBase64String("${{ secrets.SIGNING_CERTIFICATE_BASE64 }}")
+          $certBytes = [Convert]::FromBase64String("${{ secrets.SIGNING_CERTIFICATE_2023_2026 }}")
           $certPath = "${{ runner.temp }}\certificate.pfx"
           [IO.File]::WriteAllBytes($certPath, $certBytes)
           Write-Host "Certificate written to: $certPath"
