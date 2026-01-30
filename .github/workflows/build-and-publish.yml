@@ -4,7 +4,8 @@ on:
   push:
     tags:
       - '*'
-
+  workflow_dispatch:
+  
 env:
   BUILD_CONFIGURATION: Release
   DOTNET_VERSION: '9.x'
@@ -33,6 +34,7 @@ jobs:
         shell: pwsh
         run: |
           $version = "${{ github.ref_name }}"
+          $version = "99.99.99"
           Write-Host "Version: $version"
           echo "version=$version" >> $env:GITHUB_OUTPUT
 
@@ -130,9 +132,10 @@ jobs:
           
           dotnet nuget sign $nupkgPath `
             --certificate-path $certPath `
-            --certificate-password $env:CERT_PASS `
-            --timestamper $env:TIMESTAMP_URL `
+            --certificate-password "$env:SIGNING_CERTIFICATE_PASSWORD" `
+            --timestamper "$env:SIGNING_CERTIFICATE_TIMESTAMP_URL" `
             --overwrite
+
 
       - name: NuGet login (OIDC Trusted Publishing)
         uses: nuget/login@v1
@@ -141,6 +144,7 @@ jobs:
           user: ${{ secrets.NUGET_ORG_USER }}
 
       - name: Publish to NuGet.org
+        if: false  # This step will never run
         run: |
           dotnet nuget push "${{ github.workspace }}\nupkg\*.nupkg" `
             --api-key ${{ steps.nuget-login.outputs.nuget-api-key }} `
