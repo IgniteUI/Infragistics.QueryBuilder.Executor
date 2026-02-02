@@ -34,7 +34,6 @@ jobs:
         shell: pwsh
         run: |
           $version = "${{ github.ref_name }}"
-          $version = "99.99.99"
           Write-Host "Version: $version"
           echo "version=$version" >> $env:GITHUB_OUTPUT
 
