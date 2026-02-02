@@ -142,7 +142,7 @@ jobs:
       - name: Publish to NuGet.org
         shell: pwsh
         run: |
-          dotnet nuget push "${{ github.workspace }}/nupkg/*.nupkg" --api-key ${{ steps.nuget-login.outputs.nuget-api-key }} --source https://api.nuget.org/v3/index.json
+          dotnet nuget push "${{ github.workspace }}/nupkg/*.nupkg" --api-key ${{ steps.login.outputs.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json
 
       - name: Clean up certificate
         if: always()
