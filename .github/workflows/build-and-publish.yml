@@ -142,14 +142,10 @@ jobs:
       - name: Publish to NuGet.org
         shell: pwsh
         run: |
-          $packages = Get-ChildItem -Path "${{ github.workspace }}/nupkg" -Filter *.nupkg
-          foreach ($package in $packages) {
-            Write-Host "Going to publish $($package.Name)"
-            dotnet nuget push $package.FullName --api-key ${{ steps.nuget-login.outputs.nuget-api-key }} --source https://api.nuget.org/v3/index.json
-            if ($LASTEXITCODE -ne 0) {
-              throw "Failed to publish $($package.Name)"
-            }
-          }
+          $packageVersion = "${{ steps.version.outputs.version }}"
+          
+          dotnet nuget push ${{ github.workspace }}/nupkg/Infragistics.QueryBuilder.Executor.$packageVersion.nupkg --api-key ${{ steps.nuget-login.outputs.nuget-api-key }} --source https://api.nuget.org/v3/index.json
+
 
       - name: Clean up certificate
         if: always()
