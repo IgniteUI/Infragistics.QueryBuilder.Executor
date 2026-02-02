@@ -144,7 +144,7 @@ jobs:
         run: |
           $packageVersion = "${{ steps.version.outputs.version }}"
           
-          dotnet nuget push ${{ github.workspace }}/nupkg/Infragistics.QueryBuilder.Executor.$packageVersion.nupkg --api-key ${{ steps.nuget-login.outputs.nuget-api-key }} --source https://api.nuget.org/v3/index.json
+          dotnet nuget push ${{ github.workspace }}/nupkg/Infragistics.QueryBuilder.Executor.$packageVersion.nupkg --api-key ${{ steps.nuget-login.outputs.NUGET_API_KEY }} --source "https://api.nuget.org/v3/index.json"
 
 
       - name: Clean up certificate
