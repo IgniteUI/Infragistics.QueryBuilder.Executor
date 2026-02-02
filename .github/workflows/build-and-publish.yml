@@ -55,7 +55,7 @@ jobs:
         shell: pwsh
 
       - name: Sign all DLL files
-        if: false  # This step will never run
+        continue-on-error: true
         shell: pwsh
         env:
           CERT_PASS: ${{ secrets.SIGNING_CERTIFICATE_PASSWORD }}
@@ -121,21 +121,17 @@ jobs:
             exit 1
           }
 
-      - name: Sign NuGet package
+      - name: Sign NuGet package (using dotnet nuget sign)
         shell: pwsh
         env:
-          CERT_PASS: ${{ secrets.SIGNING_CERTIFICATE_PASSWORD }}
-          TIMESTAMP_URL: ${{ vars.SIGNING_CERTIFICATE_TIMESTAMP_URL }}
+          SIGNING_CERTIFICATE_PASSWORD: ${{ secrets.SIGNING_CERTIFICATE_PASSWORD }}
+          SIGNING_CERTIFICATE_TIMESTAMP_URL: ${{ vars.SIGNING_CERTIFICATE_TIMESTAMP_URL }}
         run: |
-          $certPath = "${{ runner.temp }}\certificate.pfx"
+          $certPath = Join-Path "${{ runner.temp }}" "certificate.pfx"
           $nupkgPath = "${{ github.workspace }}\nupkg\*.nupkg"
           
-          dotnet nuget sign $nupkgPath `
-            --certificate-path $certPath `
-            --certificate-password "$env:SIGNING_CERTIFICATE_PASSWORD" `
-            --timestamper "$env:SIGNING_CERTIFICATE_TIMESTAMP_URL" `
-            --overwrite
-
+          dotnet nuget sign $nupkgPath --certificate-path $certPath --certificate-password "$env:SIGNING_CERTIFICATE_PASSWORD" --timestamper "$env:SIGNING_CERTIFICATE_TIMESTAMP_URL" --overwrite 
+          
 
       - name: NuGet login (OIDC Trusted Publishing)
         uses: nuget/login@v1
