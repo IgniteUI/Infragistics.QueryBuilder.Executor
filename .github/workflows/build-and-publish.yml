@@ -137,7 +137,7 @@ jobs:
         uses: nuget/login@v1
         id: nuget-login
         with:
-          user: ${{ secrets.NUGET_ORG_USER }}
+          user: ${{ secrets.INFRAGISTICS_NUGET_ORG_USER }}
 
       - name: Publish to NuGet.org
         if: false  # This step will never run
