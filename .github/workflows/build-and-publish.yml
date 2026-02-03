@@ -42,7 +42,7 @@ jobs:
       # We can put it back in case it is important for a specific usecase - then the signed DLLs should somehow be separated from the unsigned ones.
       
       - name: Pack NuGet package
-        run: dotnet pack ./Infragistics.QueryBuilder.Executor.csproj --no-build --no-restore --configuration ${BUILD_CONFIGURATION} -p:PackageVersion=${VERSION} -o $packageOutputDir
+        run: dotnet pack ./Infragistics.QueryBuilder.Executor.csproj --no-build --no-restore --configuration ${BUILD_CONFIGURATION} -p:PackageVersion=${VERSION} -o "${{ github.workspace }}\nupkg"
 
       - name: Sign NuGet package (using dotnet nuget sign)
         shell: pwsh
