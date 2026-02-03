@@ -265,6 +265,12 @@ namespace Infragistics.QueryBuilder.Executor
             }
 
             var jsonVal = JsonValue.Create(searchValue);
+
+            if (string.IsNullOrWhiteSpace(jsonVal?.ToString()) && targetType != typeof(string))
+            {
+                return GetEmptyValue(targetType);
+            }
+
             var valueKind = jsonVal?.GetValueKind();
             if (valueKind == null || valueKind == JsonValueKind.Null || valueKind == JsonValueKind.Undefined)
             {
@@ -293,7 +299,7 @@ namespace Infragistics.QueryBuilder.Executor
                 }
             }
 
-            var value = jsonVal.Deserialize(targetType);
+            var value = jsonVal.Deserialize(targetType, new JsonSerializerOptions { NumberHandling = JsonNumberHandling.AllowReadingFromString });
 
             var convertedValue = Convert.ChangeType(value, nonNullableType, CultureInfo.InvariantCulture);
             return Expression.Constant(convertedValue, targetType);
