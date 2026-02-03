@@ -48,7 +48,7 @@ jobs:
         env:
           SIGNING_CERTIFICATE_PASSWORD: ${{ secrets.SIGNING_CERTIFICATE_PASSWORD }}
           SIGNING_CERTIFICATE_TIMESTAMP_URL: ${{ vars.SIGNING_CERTIFICATE_TIMESTAMP_URL }}
-        run: dotnet nuget sign "${{ github.workspace }}/nupkg/*.nupkg" --certificate-path signingcert.pfx--certificate-password "${SIGNING_CERTIFICATE_PASSWORD}" --timestamper "${SIGNING_CERTIFICATE_TIMESTAMP_URL}" --overwrite 
+        run: dotnet nuget sign ${{ github.workspace }}/nupkg/Infragistics.QueryBuilder.Executor.${VERSION}.nupkg --certificate-path signingcert.pfx--certificate-password "${SIGNING_CERTIFICATE_PASSWORD}" --timestamper "${SIGNING_CERTIFICATE_TIMESTAMP_URL}" --overwrite 
 
       - name: NuGet login (OIDC Trusted Publishing)
         uses: nuget/login@v1
