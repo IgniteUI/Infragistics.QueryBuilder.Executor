@@ -45,7 +45,6 @@ jobs:
         run: dotnet pack ./Infragistics.QueryBuilder.Executor.csproj --no-build --no-restore --configuration ${BUILD_CONFIGURATION} -p:PackageVersion=${VERSION} -o "${{ github.workspace }}/nupkg"
 
       - name: Sign NuGet package (using dotnet nuget sign)
-        shell: pwsh
         env:
           SIGNING_CERTIFICATE_PASSWORD: ${{ secrets.SIGNING_CERTIFICATE_PASSWORD }}
           SIGNING_CERTIFICATE_TIMESTAMP_URL: ${{ vars.SIGNING_CERTIFICATE_TIMESTAMP_URL }}
@@ -58,15 +57,4 @@ jobs:
           user: ${{ secrets.INFRAGISTICS_NUGET_ORG_USER }}
 
       - name: Publish to NuGet.org
-        shell: pwsh
         run: dotnet nuget push ${{ github.workspace }}/nupkg/Infragistics.QueryBuilder.Executor.${VERSION}.nupkg --api-key ${{ steps.nuget-login.outputs.NUGET_API_KEY }} --source "https://api.nuget.org/v3/index.json"
-
-      - name: Clean up certificate
-        if: always()
-        shell: pwsh
-        run: |
-          $certPath = "${{ runner.temp }}\certificate.pfx"
-          if (Test-Path $certPath) {
-            Remove-Item $certPath -Force
-            Write-Host "Certificate cleaned up"
-          }
