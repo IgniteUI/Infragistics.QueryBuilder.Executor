@@ -11,17 +11,19 @@ env:
 
 jobs:
   build-sign-publish:
-    runs-on: ubuntu-latest
-    environment: nuget-org-publish
+    runs-on: windows-latest
+    environment: signing
     permissions:
       id-token: write
       contents: read
+      attestations: write
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
@@ -29,26 +31,56 @@ jobs:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
       - name: Build
-        run: |
-          dotnet build Infragistics.QueryBuilder.Executor.csproj -c ${BUILD_CONFIGURATION} /p:Version=${{env.VERSION }}
+        run: dotnet build Infragistics.QueryBuilder.Executor.csproj -c ${{ env.BUILD_CONFIGURATION }} /p:Version=${{ env.VERSION }}
 
-      - name: Restore signing certificate
-        env:
-            SIGNING_CERTIFICATE_2023_2026: ${{ secrets.SIGNING_CERTIFICATE_2023_2026 }}
-        run: |
-          echo $SIGNING_CERTIFICATE_2023_2026 | base64 --decode > signingcert.pfx
+      - name: Install Sign CLI
+        run: dotnet tool install --tool-path ./sign --prerelease sign
 
-      # NB: We are removing the DLL signing process as it can cause slow DLL loading time in air-gapped scenarios.
-      # We can put it back in case it is important for a specific usecase - then the signed DLLs should somehow be separated from the unsigned ones.
-      
+      - name: Authenticate to Azure
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Sign DLLs
+        shell: pwsh
+        run: >
+          ./sign/sign code azure-key-vault "**/*.dll"
+          --base-directory "${{ github.workspace }}/bin/${{ env.BUILD_CONFIGURATION }}"
+          --azure-key-vault-url "${{ secrets.AZURE_KEYVAULT_URL }}"
+          --azure-key-vault-certificate "${{ secrets.AZURE_KEYVAULT_CERTIFICATE }}"
+
+      - name: Validate DLL signatures
+        shell: pwsh
+        run: |
+          $dlls = Get-ChildItem -Path "${{ github.workspace }}\bin\${{ env.BUILD_CONFIGURATION }}" -Filter "*.dll" -Recurse
+          $failed = @()
+          foreach ($dll in $dlls) {
+            $sig = Get-AuthenticodeSignature $dll.FullName
+            if ($sig.Status -ne 'Valid') {
+              $failed += $dll.FullName
+            }
+          }
+          if ($failed.Count -gt 0) {
+            Write-Error "Unsigned DLLs found:`n$($failed -join "`n")"
+            exit 1
+          }
+          Write-Host "All DLLs signed successfully."
+
       - name: Pack NuGet package
-        run: dotnet pack ./Infragistics.QueryBuilder.Executor.csproj --no-build --no-restore --configuration ${BUILD_CONFIGURATION} -p:PackageVersion=${VERSION} -o "${{ github.workspace }}/nupkg"
+        run: dotnet pack ./Infragistics.QueryBuilder.Executor.csproj --no-build --no-restore --configuration ${{ env.BUILD_CONFIGURATION }} -p:PackageVersion=${{ env.VERSION }} -o "${{ github.workspace }}/nupkg"
 
-      - name: Sign NuGet package (using dotnet nuget sign)
-        env:
-          SIGNING_CERTIFICATE_PASSWORD: ${{ secrets.SIGNING_CERTIFICATE_PASSWORD }}
-          SIGNING_CERTIFICATE_TIMESTAMP_URL: ${{ vars.SIGNING_CERTIFICATE_TIMESTAMP_URL }}
-        run: dotnet nuget sign ${{ github.workspace }}/nupkg/Infragistics.QueryBuilder.Executor.${VERSION}.nupkg --certificate-path signingcert.pfx --certificate-password "${SIGNING_CERTIFICATE_PASSWORD}" --timestamper "${SIGNING_CERTIFICATE_TIMESTAMP_URL}" --overwrite 
+      - name: Sign NuGet package
+        shell: pwsh
+        run: >
+          ./sign/sign code azure-key-vault "*.nupkg"
+          --base-directory "${{ github.workspace }}/nupkg"
+          --azure-key-vault-url "${{ secrets.AZURE_KEYVAULT_URL }}"
+          --azure-key-vault-certificate "${{ secrets.AZURE_KEYVAULT_CERTIFICATE }}"
+
+      - name: Validate NuGet package signature
+        run: dotnet nuget verify "${{ github.workspace }}/nupkg/Infragistics.QueryBuilder.Executor.${{ env.VERSION }}.nupkg"
 
       - name: NuGet login (OIDC Trusted Publishing)
         uses: nuget/login@v1
@@ -57,4 +89,4 @@ jobs:
           user: ${{ secrets.INFRAGISTICS_NUGET_ORG_USER }}
 
       - name: Publish to NuGet.org
-        run: dotnet nuget push ${{ github.workspace }}/nupkg/Infragistics.QueryBuilder.Executor.${VERSION}.nupkg --api-key ${{ steps.nuget-login.outputs.NUGET_API_KEY }} --source "https://api.nuget.org/v3/index.json"
+        run: dotnet nuget push "${{ github.workspace }}/nupkg/Infragistics.QueryBuilder.Executor.${{ env.VERSION }}.nupkg" --api-key ${{ steps.nuget-login.outputs.NUGET_API_KEY }} --source "https://api.nuget.org/v3/index.json"
