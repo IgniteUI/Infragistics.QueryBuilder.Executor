@@ -82,6 +82,13 @@ jobs:
       - name: Validate NuGet package signature
         run: dotnet nuget verify "${{ github.workspace }}/nupkg/Infragistics.QueryBuilder.Executor.${{ env.VERSION }}.nupkg"
 
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: ${{ steps.vars.outputs.artifact_name }}
+          path: ${{ github.workspace }}/nupkg
+          retention-days: 1
+
       - name: NuGet login (OIDC Trusted Publishing)
         uses: nuget/login@v1
         id: nuget-login
