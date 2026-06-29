@@ -85,7 +85,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v7.0.1
         with:
-          name: ${{ steps.vars.outputs.artifact_name }}
+          name: Generated NuGet Package 
           path: ${{ github.workspace }}/nupkg
           retention-days: 1
 
