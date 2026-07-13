@@ -42,20 +42,20 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Write OIDC token for Azure SDK
-        shell: pwsh
-        run: |
-          $resp = Invoke-RestMethod `
-            -Uri "$($env:ACTIONS_ID_TOKEN_REQUEST_URL)&audience=api://AzureADTokenExchange" `
-            -Headers @{ Authorization = "bearer $env:ACTIONS_ID_TOKEN_REQUEST_TOKEN" }
-          $resp.value | Set-Content "${{ runner.temp }}/azure_oidc_token.txt" -NoNewline
+  #    - name: Write OIDC token for Azure SDK
+  #      shell: pwsh
+  #      run: |
+  #        $resp = Invoke-RestMethod `
+  #          -Uri "$($env:ACTIONS_ID_TOKEN_REQUEST_URL)&audience=api://AzureADTokenExchange" `
+  #          -Headers @{ Authorization = "bearer $env:ACTIONS_ID_TOKEN_REQUEST_TOKEN" }
+  #        $resp.value | Set-Content "${{ runner.temp }}/azure_oidc_token.txt" -NoNewline
 
       - name: Sign DLLs
         shell: pwsh
-        env:
-          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-          AZURE_FEDERATED_TOKEN_FILE: ${{ runner.temp }}/azure_oidc_token.txt
+#        env:
+#          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+#          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+#          AZURE_FEDERATED_TOKEN_FILE: ${{ runner.temp }}/azure_oidc_token.txt
         run: >
           dotnet tool run sign code azure-key-vault "**/*.dll"
           --base-directory "${{ github.workspace }}/bin/${{ env.BUILD_CONFIGURATION }}"
@@ -85,10 +85,10 @@ jobs:
 
       - name: Sign NuGet package
         shell: pwsh
-        env:
-          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-          AZURE_FEDERATED_TOKEN_FILE: ${{ runner.temp }}/azure_oidc_token.txt
+ #       env:
+ #         AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+ #         AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+ #         AZURE_FEDERATED_TOKEN_FILE: ${{ runner.temp }}/azure_oidc_token.txt
         run: >
           dotnet tool run sign code azure-key-vault "*.nupkg"
           --base-directory "${{ github.workspace }}/nupkg"
