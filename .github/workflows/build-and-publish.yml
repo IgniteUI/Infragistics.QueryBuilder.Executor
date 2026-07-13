@@ -61,7 +61,7 @@ jobs:
           --base-directory "${{ github.workspace }}/bin/${{ env.BUILD_CONFIGURATION }}"
           --azure-key-vault-url "${{ secrets.AZURE_KEYVAULT_URL }}"
           --azure-key-vault-certificate "${{ secrets.AZURE_KEYVAULT_CERTIFICATE }}"
-          --verbosity Diagnostic
+          --verbosity trace
 
       - name: Validate DLL signatures
         shell: pwsh
