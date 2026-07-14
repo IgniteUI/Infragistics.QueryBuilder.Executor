@@ -49,6 +49,8 @@ jobs:
           --base-directory "${{ github.workspace }}/bin/${{ env.BUILD_CONFIGURATION }}"
           --azure-key-vault-url "${{ secrets.AZURE_KEYVAULT_URL }}"
           --azure-key-vault-certificate "${{ secrets.AZURE_KEYVAULT_CERTIFICATE }}"
+          --azure-credential-type azure-cli
+          --verbosity Warning
 
       - name: Validate DLL signatures
         shell: pwsh
@@ -77,9 +79,11 @@ jobs:
           --base-directory "${{ github.workspace }}/nupkg"
           --azure-key-vault-url "${{ secrets.AZURE_KEYVAULT_URL }}"
           --azure-key-vault-certificate "${{ secrets.AZURE_KEYVAULT_CERTIFICATE }}"
+          --azure-credential-type azure-cli
+          --verbosity Warning
 
       - name: Validate NuGet package signature
-        run: dotnet nuget verify "${{ github.workspace }}/nupkg/Infragistics.QueryBuilder.Executor.${{ env.VERSION }}.nupkg"
+        run: dotnet nuget verify "${{ github.workspace }}/nupkg/Infragistics.QueryBuilder.Executor.${{ env.VERSION }}.nupkg" --verbosity quiet
 
       - name: NuGet login (OIDC Trusted Publishing)
         uses: NuGet/login@8d196754b4036150537f80ac539e15c2f1028841   # v1
