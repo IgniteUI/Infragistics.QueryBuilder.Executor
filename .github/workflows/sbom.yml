@@ -1,0 +1,107 @@
+name: Generate SBOM
+
+# Runs when the 'generate sbom' label is added to a PR, or when a release is published.
+# Uses the sbom-tool CLI (version pinned in .config/sbom-tool/dotnet-tools.json)
+# so the NuGet package is never modified and no SBOM is embedded in it.
+on:
+  pull_request:
+    types: [labeled]
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sbom-${{ github.event_name == 'release' && github.ref_name || github.event.pull_request.number }}
+  cancel-in-progress: true
+
+env:
+  BUILD_CONFIGURATION: Release
+  DOTNET_VERSION: '9.x'
+  PACKAGE_VERSION: ${{ github.event_name == 'release' && github.ref_name || format('0.0.0-pr.{0}', github.event.pull_request.number) }}
+
+jobs:
+  sbom:
+    if: github.event_name == 'release' || github.event.label.name == 'generate sbom'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Pack NuGet package
+        run: >
+          dotnet pack Infragistics.QueryBuilder.Executor.csproj
+          --configuration ${{ env.BUILD_CONFIGURATION }}
+          -p:Version=${{ env.PACKAGE_VERSION }}
+          -o ./artifacts
+
+      # Dedicated nested manifest keeps sbom-tool out of the root 'dotnet tool restore' used by build-and-publish.yml
+      - name: Restore sbom-tool (pinned)
+        run: dotnet tool restore --tool-manifest .config/sbom-tool/dotnet-tools.json
+
+      # -b: the shipped artifact (nupkg) gets listed with its hash in the SBOM's files section
+      # -bc: dependency detection scans the repo root (csproj)
+      - name: Generate SBOM
+        working-directory: .config/sbom-tool
+        run: >
+          dotnet tool run sbom-tool -- generate
+          -b ${{ github.workspace }}/artifacts
+          -bc ${{ github.workspace }}
+          -pn Infragistics.QueryBuilder.Executor
+          -pv ${{ env.PACKAGE_VERSION }}
+          -ps "Infragistics Inc."
+          -nsb http://spdx.org/spdxdocs/Infragistics.QueryBuilder.Executor
+          -V Information
+
+      - name: Verify SBOM
+        run: |
+          set -euo pipefail
+          test -s artifacts/_manifest/spdx_2.2/manifest.spdx.json
+          test -s artifacts/_manifest/spdx_2.2/manifest.spdx.json.sha256
+          echo "SBOM generated successfully."
+
+      - name: Upload NuGet package
+        uses: actions/upload-artifact@v7
+        with:
+          name: nupkg
+          path: artifacts/*.nupkg
+          retention-days: 1
+          if-no-files-found: error
+
+      - name: Upload SBOM files
+        uses: actions/upload-artifact@v7
+        with:
+          name: sbom-spdx_2.2
+          path: artifacts/_manifest/spdx_2.2
+          retention-days: 1
+          if-no-files-found: error
+
+  attach-to-release:
+    if: github.event_name == 'release'
+    needs: sbom
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # required to upload release assets
+
+    steps:
+      - name: Download SBOM artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: sbom-spdx_2.2
+          path: spdx_2.2
+
+      - name: Attach SBOM to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          asset="Infragistics.QueryBuilder.Executor.${TAG}.spdx_2.2.zip"
+          (cd spdx_2.2 && zip -r "../${asset}" .)
+          gh release upload "$TAG" "$asset" --clobber -R "${{ github.repository }}"
