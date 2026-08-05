@@ -29,8 +29,31 @@ jobs:
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
-      - name: Build
-        run: dotnet build Infragistics.QueryBuilder.Executor.csproj -c ${{ env.BUILD_CONFIGURATION }} /p:Version=${{ env.VERSION }}
+      - name: Restore strong-name key
+        shell: pwsh
+        env:
+          STRONG_NAME_KEY_BASE64: ${{ secrets.IG_STRONG_NAME_KEY }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:STRONG_NAME_KEY_BASE64)) {
+            throw "The IG_STRONG_NAME_KEY organization secret is empty or unavailable to this repository."
+          }
+
+          $keyBytes = [Convert]::FromBase64String($env:STRONG_NAME_KEY_BASE64)
+          [System.IO.File]::WriteAllBytes("${{ runner.temp }}\IG.StrongName.snk", $keyBytes)
+
+      - name: Build strong-named assemblies
+        shell: pwsh
+        run: |
+          dotnet build Infragistics.QueryBuilder.Executor.csproj `
+            -c ${{ env.BUILD_CONFIGURATION }} `
+            /p:Version=${{ env.VERSION }} `
+            /p:SignAssembly=true `
+            /p:AssemblyOriginatorKeyFile="${{ runner.temp }}\IG.StrongName.snk"
+
+      - name: Delete strong-name key
+        if: always()
+        shell: pwsh
+        run: Remove-Item "${{ runner.temp }}\IG.StrongName.snk" -Force -ErrorAction SilentlyContinue
 
       - name: Restore .NET local tools
         run: dotnet tool restore
@@ -71,6 +94,50 @@ jobs:
 
       - name: Pack NuGet package
         run: dotnet pack ./Infragistics.QueryBuilder.Executor.csproj --no-build --no-restore --configuration ${{ env.BUILD_CONFIGURATION }} -p:PackageVersion=${{ env.VERSION }} -o "${{ github.workspace }}/nupkg"
+
+      - name: Validate packaged assembly strong names
+        shell: pwsh
+        run: |
+          $packagePath = "${{ github.workspace }}\nupkg\Infragistics.QueryBuilder.Executor.${{ env.VERSION }}.nupkg"
+          $validationRoot = "${{ runner.temp }}\strong-name-validation"
+          $archivePath = "$validationRoot\package.zip"
+          $extractPath = "$validationRoot\package"
+
+          try {
+            if (-not (Test-Path $packagePath)) {
+              throw "NuGet package not found: $packagePath"
+            }
+
+            New-Item -ItemType Directory -Path $validationRoot -Force | Out-Null
+            Copy-Item $packagePath $archivePath
+            Expand-Archive -Path $archivePath -DestinationPath $extractPath -Force
+
+            $assemblies = @(Get-ChildItem -Path $extractPath -Filter "*.dll" -Recurse)
+            if ($assemblies.Count -eq 0) {
+              throw "No assemblies were found in the NuGet package."
+            }
+
+            $windowsSdkRoot = Join-Path ${env:ProgramFiles(x86)} "Microsoft SDKs\Windows"
+            $strongNameTool = Get-ChildItem -Path $windowsSdkRoot -Filter "sn.exe" -Recurse |
+              Sort-Object FullName -Descending |
+              Select-Object -First 1
+
+            if ($null -eq $strongNameTool) {
+              throw "Could not find sn.exe in the Windows SDK."
+            }
+
+            foreach ($assembly in $assemblies) {
+              & $strongNameTool.FullName -vf $assembly.FullName
+              if ($LASTEXITCODE -ne 0) {
+                throw "Strong-name verification failed: $($assembly.FullName)"
+              }
+            }
+
+            Write-Host "Verified $($assemblies.Count) strong-name signed package assemblies."
+          }
+          finally {
+            Remove-Item $validationRoot -Recurse -Force -ErrorAction SilentlyContinue
+          }
 
       - name: Sign NuGet package
         shell: pwsh
