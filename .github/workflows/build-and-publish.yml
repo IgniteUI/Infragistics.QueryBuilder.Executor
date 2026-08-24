@@ -73,6 +73,8 @@ jobs:
             bin/**
             obj/**
             build-output.sha256
+          # obj/ contains dot-prefixed generated sources, which are otherwise dropped as hidden files.
+          include-hidden-files: true
           retention-days: 1
           if-no-files-found: error
 
@@ -159,6 +161,7 @@ jobs:
             bin/**
             obj/**
             signed-assemblies.sha256
+          include-hidden-files: true
           retention-days: 1
           if-no-files-found: error
 
