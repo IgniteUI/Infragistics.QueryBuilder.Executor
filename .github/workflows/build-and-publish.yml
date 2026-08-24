@@ -6,6 +6,9 @@ on:
 
 permissions: {}
 
+concurrency:
+  group: release-${{ github.ref_name }}
+
 env:
   BUILD_CONFIGURATION: Release
   DOTNET_VERSION: '9.x'
@@ -16,6 +19,7 @@ jobs:
   build:
     name: Build
     runs-on: windows-latest
+    timeout-minutes: 20
     permissions:
       contents: read
     outputs:
@@ -49,7 +53,7 @@ jobs:
         run: |
           dotnet build Infragistics.QueryBuilder.Executor.csproj `
             -c ${{ env.BUILD_CONFIGURATION }} `
-            /p:Version=${{ env.VERSION }} `
+            /p:Version=$env:VERSION `
             /p:SignAssembly=true `
             /p:AssemblyOriginatorKeyFile="${{ runner.temp }}\IG.StrongName.snk"
 
@@ -81,6 +85,7 @@ jobs:
     name: Sign assemblies
     needs: build
     runs-on: windows-latest
+    timeout-minutes: 20
     # The environment is what makes the OIDC subject claim match the Entra federated credential.
     environment: nuget-org-publish
     permissions:
@@ -108,9 +113,11 @@ jobs:
 
       - name: Verify build output
         shell: pwsh
+        env:
+          EXPECTED_MANIFEST_HASH: ${{ needs.build.outputs.manifest-sha256 }}
         run: >
           .github/scripts/artifact-checksums.ps1 -Mode Verify -ManifestPath build-output.sha256 -Path bin, obj
-          -ExpectedManifestHash ${{ needs.build.outputs.manifest-sha256 }}
+          -ExpectedManifestHash $env:EXPECTED_MANIFEST_HASH
 
       - name: Restore .NET local tools
         run: dotnet tool restore
@@ -170,6 +177,7 @@ jobs:
     name: Pack and sign package
     needs: sign-assemblies
     runs-on: windows-latest
+    timeout-minutes: 20
     environment: nuget-org-publish
     permissions:
       contents: read
@@ -196,17 +204,19 @@ jobs:
 
       - name: Verify signed assemblies
         shell: pwsh
+        env:
+          EXPECTED_MANIFEST_HASH: ${{ needs.sign-assemblies.outputs.manifest-sha256 }}
         run: >
           .github/scripts/artifact-checksums.ps1 -Mode Verify -ManifestPath signed-assemblies.sha256 -Path bin, obj
-          -ExpectedManifestHash ${{ needs.sign-assemblies.outputs.manifest-sha256 }}
+          -ExpectedManifestHash $env:EXPECTED_MANIFEST_HASH
 
       - name: Pack NuGet package
-        run: dotnet pack ./Infragistics.QueryBuilder.Executor.csproj --no-build --no-restore --configuration ${{ env.BUILD_CONFIGURATION }} -p:PackageVersion=${{ env.VERSION }} -o "${{ github.workspace }}/nupkg"
+        run: dotnet pack ./Infragistics.QueryBuilder.Executor.csproj --no-build --no-restore --configuration ${{ env.BUILD_CONFIGURATION }} -p:PackageVersion=$env:VERSION -o "${{ github.workspace }}/nupkg"
 
       - name: Validate packaged assembly strong names
         shell: pwsh
         run: |
-          $packagePath = "${{ github.workspace }}\nupkg\Infragistics.QueryBuilder.Executor.${{ env.VERSION }}.nupkg"
+          $packagePath = "${{ github.workspace }}\nupkg\Infragistics.QueryBuilder.Executor.${env:VERSION}.nupkg"
           $validationRoot = "${{ runner.temp }}\strong-name-validation"
           $archivePath = "$validationRoot\package.zip"
           $extractPath = "$validationRoot\package"
@@ -269,14 +279,14 @@ jobs:
           --verbosity Warning
 
       - name: Validate NuGet package signature
-        run: dotnet nuget verify "${{ github.workspace }}/nupkg/Infragistics.QueryBuilder.Executor.${{ env.VERSION }}.nupkg" --verbosity quiet
+        run: dotnet nuget verify "${{ github.workspace }}/nupkg/Infragistics.QueryBuilder.Executor.${env:VERSION}.nupkg" --verbosity quiet
 
       # This digest is the identity every downstream job re-checks before acting on the package.
       - name: Record package digest
         id: digest
         shell: pwsh
         run: |
-          $name = "Infragistics.QueryBuilder.Executor.${{ env.VERSION }}.nupkg"
+          $name = "Infragistics.QueryBuilder.Executor.${env:VERSION}.nupkg"
           $package = "${{ github.workspace }}\nupkg\$name"
           $digest = (Get-FileHash -LiteralPath $package -Algorithm SHA256).Hash.ToLowerInvariant()
 
@@ -298,6 +308,7 @@ jobs:
     name: Generate SBOM and attest
     needs: pack
     runs-on: windows-latest
+    timeout-minutes: 20
     permissions:
       contents: read
       id-token: write
@@ -325,10 +336,12 @@ jobs:
       - name: Verify signed package digest
         id: verify
         shell: pwsh
+        env:
+          EXPECTED_NUPKG_SHA256: ${{ needs.pack.outputs.nupkg-sha256 }}
         run: |
-          $package = "${{ github.workspace }}\nupkg\Infragistics.QueryBuilder.Executor.${{ env.VERSION }}.nupkg"
+          $package = "${{ github.workspace }}\nupkg\Infragistics.QueryBuilder.Executor.${env:VERSION}.nupkg"
           $digest = (Get-FileHash -LiteralPath $package -Algorithm SHA256).Hash.ToLowerInvariant()
-          $expected = "${{ needs.pack.outputs.nupkg-sha256 }}"
+          $expected = $env:EXPECTED_NUPKG_SHA256
 
           if ($digest -ne $expected) {
             throw "Package digest changed between jobs. Expected $expected but found $digest."
@@ -360,7 +373,7 @@ jobs:
           -bc ${{ github.workspace }}
           -m ${{ github.workspace }}/sbom/spdx-2.2
           -pn Infragistics.QueryBuilder.Executor
-          -pv ${{ env.VERSION }}
+          -pv $env:VERSION
           -ps "Infragistics Inc."
           -nsb http://spdx.org/spdxdocs/Infragistics.QueryBuilder.Executor
           -mi SPDX:2.2
@@ -377,7 +390,7 @@ jobs:
           -bc ${{ github.workspace }}
           -m ${{ github.workspace }}/sbom/spdx-3.0
           -pn Infragistics.QueryBuilder.Executor
-          -pv ${{ env.VERSION }}
+          -pv $env:VERSION
           -ps "Infragistics Inc."
           -nsb http://spdx.org/spdxdocs/Infragistics.QueryBuilder.Executor
           -mi SPDX:3.0
@@ -389,7 +402,7 @@ jobs:
       - name: Verify SBOM output
         shell: pwsh
         run: |
-          $name = "Infragistics.QueryBuilder.Executor.${{ env.VERSION }}.nupkg"
+          $name = "Infragistics.QueryBuilder.Executor.${env:VERSION}.nupkg"
           $spdx22 = "${{ github.workspace }}\sbom\spdx-2.2\_manifest\spdx_2.2\manifest.spdx.json"
           $spdx30 = "${{ github.workspace }}\sbom\spdx-3.0\_manifest\spdx_3.0\manifest.spdx.json"
 
@@ -447,6 +460,7 @@ jobs:
     name: Publish to NuGet.org
     needs: [pack, sbom]
     runs-on: windows-latest
+    timeout-minutes: 15
     environment: nuget-org-publish
     permissions:
       contents: read
@@ -466,11 +480,14 @@ jobs:
 
       - name: Verify the package that was packed, signed, and attested
         shell: pwsh
+        env:
+          PACK_NUPKG_SHA256: ${{ needs.pack.outputs.nupkg-sha256 }}
+          ATTESTED_NUPKG_SHA256: ${{ needs.sbom.outputs.attested-sha256 }}
         run: |
-          $package = "${{ github.workspace }}\nupkg\Infragistics.QueryBuilder.Executor.${{ env.VERSION }}.nupkg"
+          $package = "${{ github.workspace }}\nupkg\Infragistics.QueryBuilder.Executor.${env:VERSION}.nupkg"
           $digest = (Get-FileHash -LiteralPath $package -Algorithm SHA256).Hash.ToLowerInvariant()
 
-          foreach ($expected in @("${{ needs.pack.outputs.nupkg-sha256 }}", "${{ needs.sbom.outputs.attested-sha256 }}")) {
+          foreach ($expected in @($env:PACK_NUPKG_SHA256, $env:ATTESTED_NUPKG_SHA256)) {
             if ($digest -ne $expected) {
               throw "Refusing to publish: expected digest $expected but found $digest."
             }
@@ -479,7 +496,7 @@ jobs:
           Write-Host "Publishing package with digest $digest."
 
       - name: Validate NuGet package signature
-        run: dotnet nuget verify "${{ github.workspace }}/nupkg/Infragistics.QueryBuilder.Executor.${{ env.VERSION }}.nupkg" --verbosity quiet
+        run: dotnet nuget verify "${{ github.workspace }}/nupkg/Infragistics.QueryBuilder.Executor.${env:VERSION}.nupkg" --verbosity quiet
 
       - name: NuGet login (OIDC Trusted Publishing)
         uses: NuGet/login@8d196754b4036150537f80ac539e15c2f1028841   # v1
@@ -488,14 +505,16 @@ jobs:
           user: ${{ secrets.INFRAGISTICS_NUGET_ORG_USER }}
 
       - name: Publish to NuGet.org
-        run: dotnet nuget push "${{ github.workspace }}/nupkg/Infragistics.QueryBuilder.Executor.${{ env.VERSION }}.nupkg" --api-key ${{ steps.nuget-login.outputs.NUGET_API_KEY }} --source "https://api.nuget.org/v3/index.json"
+        run: dotnet nuget push "${{ github.workspace }}/nupkg/Infragistics.QueryBuilder.Executor.${env:VERSION}.nupkg" --api-key ${{ steps.nuget-login.outputs.NUGET_API_KEY }} --source "https://api.nuget.org/v3/index.json"
 
       - name: Record published digest
         shell: pwsh
+        env:
+          PACK_NUPKG_SHA256: ${{ needs.pack.outputs.nupkg-sha256 }}
         run: |
           @(
             "### Published to NuGet.org",
-            '`${{ needs.pack.outputs.nupkg-sha256 }}`',
+            ('`' + $env:PACK_NUPKG_SHA256 + '`'),
             "",
             "NuGet.org repository-signs every uploaded package, so the digest it serves differs from the one above.",
             "Verify attestations against the .nupkg attached to this release."
@@ -505,6 +524,7 @@ jobs:
     name: Attach release evidence
     needs: [pack, sbom, publish]
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: write
 
