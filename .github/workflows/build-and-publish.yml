@@ -346,6 +346,11 @@ jobs:
       - name: Restore sbom-tool (pinned)
         run: dotnet tool restore --tool-manifest .config/sbom-tool/dotnet-tools.json
 
+      # sbom-tool fails unless the -m directory already exists.
+      - name: Create SBOM output directories
+        shell: pwsh
+        run: New-Item -ItemType Directory -Force -Path "${{ github.workspace }}\sbom\spdx-2.2", "${{ github.workspace }}\sbom\spdx-3.0" | Out-Null
+
       # -b is the signed package folder, so the shipped nupkg and its hash land in the SBOM's files section.
       # -bc scans the repository for the dependency graph; -li/-pm resolve license and supplier metadata.
       - name: Generate SBOM (SPDX 2.2)

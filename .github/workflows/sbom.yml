@@ -43,6 +43,10 @@ jobs:
       - name: Restore sbom-tool (pinned)
         run: dotnet tool restore --tool-manifest .config/sbom-tool/dotnet-tools.json
 
+      # sbom-tool fails unless the -m directory already exists.
+      - name: Create SBOM output directories
+        run: mkdir -p sbom/spdx-2.2 sbom/spdx-3.0
+
       # -b: the packed nupkg gets listed with its hash in the SBOM's files section
       # -bc: dependency detection scans the repo root (csproj)
       # -li/-pm: resolve license and supplier metadata for the detected packages
