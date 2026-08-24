@@ -82,6 +82,8 @@ jobs:
     name: Sign assemblies
     needs: build
     runs-on: windows-latest
+    # The environment is what makes the OIDC subject claim match the Entra federated credential.
+    environment: nuget-org-publish
     permissions:
       contents: read
       id-token: write
@@ -169,6 +171,7 @@ jobs:
     name: Pack and sign package
     needs: sign-assemblies
     runs-on: windows-latest
+    environment: nuget-org-publish
     permissions:
       contents: read
       id-token: write
