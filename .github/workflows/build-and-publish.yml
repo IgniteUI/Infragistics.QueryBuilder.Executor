@@ -13,6 +13,8 @@ env:
   BUILD_CONFIGURATION: Release
   DOTNET_VERSION: '9.x'
   VERSION: ${{ github.ref_name }}
+  # Public, deliberately pinned identity. The strong-name counterpart lives in eng/IG.publickey.hex.
+  EXPECTED_CERT_SUBJECT_CN: 'Infragistics, Inc.'
 
 jobs:
   # Holds the strong-name key, but no OIDC token, no Key Vault access and no publishing rights.
@@ -144,17 +146,34 @@ jobs:
         run: |
           $dlls = Get-ChildItem -Path "${{ github.workspace }}\bin\${{ env.BUILD_CONFIGURATION }}" -Filter "*.dll" -Recurse
           $failed = @()
+          $thumbprints = @{}
           foreach ($dll in $dlls) {
             $sig = Get-AuthenticodeSignature $dll.FullName
             if ($sig.Status -ne 'Valid') {
-              $failed += $dll.FullName
+              $failed += "$($dll.FullName): signature status $($sig.Status)."
+              continue
             }
+
+            # A valid signature only proves some trusted certificate was used, not the approved one.
+            $cn = $sig.SignerCertificate.GetNameInfo('SimpleName', $false)
+            if ($cn -ne $env:EXPECTED_CERT_SUBJECT_CN) {
+              $failed += "$($dll.FullName): signed by '$cn', expected '$($env:EXPECTED_CERT_SUBJECT_CN)'."
+              continue
+            }
+
+            $thumbprints[$sig.SignerCertificate.Thumbprint] = $true
           }
           if ($failed.Count -gt 0) {
-            Write-Error "Unsigned DLLs found:`n$($failed -join "`n")"
+            Write-Error "Authenticode validation failed:`n$($failed -join "`n")"
             exit 1
           }
-          Write-Host "All DLLs signed successfully."
+          Write-Host "All $($dlls.Count) DLLs signed by '$($env:EXPECTED_CERT_SUBJECT_CN)'."
+
+          @(
+            "### Authenticode signer",
+            "- Subject CN: $($env:EXPECTED_CERT_SUBJECT_CN)",
+            "- Thumbprint: $($thumbprints.Keys -join ', ')"
+          ) | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY
 
       - name: Record signed assembly checksums
         id: checksums
@@ -230,28 +249,7 @@ jobs:
             Copy-Item $packagePath $archivePath
             Expand-Archive -Path $archivePath -DestinationPath $extractPath -Force
 
-            $assemblies = @(Get-ChildItem -Path $extractPath -Filter "*.dll" -Recurse)
-            if ($assemblies.Count -eq 0) {
-              throw "No assemblies were found in the NuGet package."
-            }
-
-            $windowsSdkRoot = Join-Path ${env:ProgramFiles(x86)} "Microsoft SDKs\Windows"
-            $strongNameTool = Get-ChildItem -Path $windowsSdkRoot -Filter "sn.exe" -Recurse |
-              Sort-Object FullName -Descending |
-              Select-Object -First 1
-
-            if ($null -eq $strongNameTool) {
-              throw "Could not find sn.exe in the Windows SDK."
-            }
-
-            foreach ($assembly in $assemblies) {
-              & $strongNameTool.FullName -vf $assembly.FullName
-              if ($LASTEXITCODE -ne 0) {
-                throw "Strong-name verification failed: $($assembly.FullName)"
-              }
-            }
-
-            Write-Host "Verified $($assemblies.Count) strong-name signed package assemblies."
+            .github/scripts/verify-strong-name.ps1 -Path $extractPath -ExpectedPublicKeyPath eng/IG.publickey.hex
           }
           finally {
             Remove-Item $validationRoot -Recurse -Force -ErrorAction SilentlyContinue
