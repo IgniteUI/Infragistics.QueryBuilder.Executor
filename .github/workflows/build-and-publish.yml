@@ -15,6 +15,8 @@ env:
   VERSION: ${{ github.ref_name }}
   # Public, deliberately pinned identity. The strong-name counterpart lives in eng/IG.publickey.hex.
   EXPECTED_CERT_SUBJECT_CN: 'Infragistics, Inc.'
+  # Bound sbom-tool's external license lookup.
+  SBOM_LICENSE_TIMEOUT_SECONDS: '180'
 
 jobs:
   # Holds the strong-name key, but no OIDC token, no Key Vault access and no publishing rights.
@@ -24,8 +26,6 @@ jobs:
     timeout-minutes: 20
     permissions:
       contents: read
-    outputs:
-      manifest-sha256: ${{ steps.checksums.outputs.manifest-sha256 }}
 
     steps:
       - name: Checkout
@@ -37,6 +37,9 @@ jobs:
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Restore .NET dependencies
+        run: dotnet restore Infragistics.QueryBuilder.Executor.csproj
 
       - name: Restore strong-name key
         shell: pwsh
@@ -54,21 +57,16 @@ jobs:
         shell: pwsh
         run: |
           dotnet build Infragistics.QueryBuilder.Executor.csproj `
-            -c ${{ env.BUILD_CONFIGURATION }} `
-            /p:Version=$env:VERSION `
-            /p:SignAssembly=true `
-            /p:AssemblyOriginatorKeyFile="${{ runner.temp }}\IG.StrongName.snk"
+            --configuration ${{ env.BUILD_CONFIGURATION }} `
+            --no-restore `
+            -p:Version=$env:VERSION `
+            -p:SignAssembly=true `
+            -p:AssemblyOriginatorKeyFile="${{ runner.temp }}\IG.StrongName.snk"
 
       - name: Delete strong-name key
         if: always()
         shell: pwsh
         run: Remove-Item "${{ runner.temp }}\IG.StrongName.snk" -Force -ErrorAction SilentlyContinue
-
-      # obj/ travels with bin/ so the later pack job can run --no-build --no-restore.
-      - name: Record build output checksums
-        id: checksums
-        shell: pwsh
-        run: .github/scripts/artifact-checksums.ps1 -Mode Write -ManifestPath build-output.sha256 -Path bin, obj
 
       - name: Upload build output
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -77,8 +75,6 @@ jobs:
           path: |
             bin/**
             obj/**
-            build-output.sha256
-          # obj/ contains dot-prefixed generated sources, which are otherwise dropped as hidden files.
           include-hidden-files: true
           retention-days: 1
           if-no-files-found: error
@@ -93,8 +89,6 @@ jobs:
     permissions:
       contents: read
       id-token: write
-    outputs:
-      manifest-sha256: ${{ steps.checksums.outputs.manifest-sha256 }}
 
     steps:
       - name: Checkout
@@ -112,14 +106,7 @@ jobs:
         with:
           name: build-output
           path: .
-
-      - name: Verify build output
-        shell: pwsh
-        env:
-          EXPECTED_MANIFEST_HASH: ${{ needs.build.outputs.manifest-sha256 }}
-        run: >
-          .github/scripts/artifact-checksums.ps1 -Mode Verify -ManifestPath build-output.sha256 -Path bin, obj
-          -ExpectedManifestHash $env:EXPECTED_MANIFEST_HASH
+          digest-mismatch: error
 
       - name: Restore .NET local tools
         run: dotnet tool restore
@@ -144,7 +131,11 @@ jobs:
       - name: Validate DLL signatures
         shell: pwsh
         run: |
-          $dlls = Get-ChildItem -Path "${{ github.workspace }}\bin\${{ env.BUILD_CONFIGURATION }}" -Filter "*.dll" -Recurse
+          $dlls = @(Get-ChildItem -Path "${{ github.workspace }}\bin\${{ env.BUILD_CONFIGURATION }}" -Filter '*.dll' -Recurse -File)
+          if ($dlls.Count -eq 0) {
+            throw "No DLLs found to validate."
+          }
+
           $failed = @()
           $thumbprints = @{}
           foreach ($dll in $dlls) {
@@ -164,9 +155,9 @@ jobs:
             $thumbprints[$sig.SignerCertificate.Thumbprint] = $true
           }
           if ($failed.Count -gt 0) {
-            Write-Error "Authenticode validation failed:`n$($failed -join "`n")"
-            exit 1
+            throw "Authenticode validation failed:`n$($failed -join "`n")"
           }
+
           Write-Host "All $($dlls.Count) DLLs signed by '$($env:EXPECTED_CERT_SUBJECT_CN)'."
 
           @(
@@ -175,11 +166,6 @@ jobs:
             "- Thumbprint: $($thumbprints.Keys -join ', ')"
           ) | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY
 
-      - name: Record signed assembly checksums
-        id: checksums
-        shell: pwsh
-        run: .github/scripts/artifact-checksums.ps1 -Mode Write -ManifestPath signed-assemblies.sha256 -Path bin, obj
-
       - name: Upload signed assemblies
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -187,7 +173,6 @@ jobs:
           path: |
             bin/**
             obj/**
-            signed-assemblies.sha256
           include-hidden-files: true
           retention-days: 1
           if-no-files-found: error
@@ -220,17 +205,16 @@ jobs:
         with:
           name: signed-assemblies
           path: .
-
-      - name: Verify signed assemblies
-        shell: pwsh
-        env:
-          EXPECTED_MANIFEST_HASH: ${{ needs.sign-assemblies.outputs.manifest-sha256 }}
-        run: >
-          .github/scripts/artifact-checksums.ps1 -Mode Verify -ManifestPath signed-assemblies.sha256 -Path bin, obj
-          -ExpectedManifestHash $env:EXPECTED_MANIFEST_HASH
+          digest-mismatch: error
 
       - name: Pack NuGet package
-        run: dotnet pack ./Infragistics.QueryBuilder.Executor.csproj --no-build --no-restore --configuration ${{ env.BUILD_CONFIGURATION }} -p:PackageVersion=$env:VERSION -o "${{ github.workspace }}/nupkg"
+        run: >
+          dotnet pack Infragistics.QueryBuilder.Executor.csproj
+          --configuration ${{ env.BUILD_CONFIGURATION }}
+          --no-build
+          --no-restore
+          -p:PackageVersion=$env:VERSION
+          -o "${{ github.workspace }}/nupkg"
 
       - name: Validate packaged assembly strong names
         shell: pwsh
@@ -339,63 +323,50 @@ jobs:
         run: |
           $package = "${{ github.workspace }}\nupkg\Infragistics.QueryBuilder.Executor.${env:VERSION}.nupkg"
           $digest = (Get-FileHash -LiteralPath $package -Algorithm SHA256).Hash.ToLowerInvariant()
-          $expected = $env:EXPECTED_NUPKG_SHA256
-
-          if ($digest -ne $expected) {
-            throw "Package digest changed between jobs. Expected $expected but found $digest."
+          if ($digest -ne $env:EXPECTED_NUPKG_SHA256) {
+            throw "Package digest changed between jobs. Expected $($env:EXPECTED_NUPKG_SHA256) but found $digest."
           }
 
           "nupkg-sha256=$digest" | Add-Content -LiteralPath $env:GITHUB_OUTPUT
           Write-Host "Verified package digest $digest."
 
-      # obj/project.assets.json is what component detection reads for the transitive NuGet graph.
-      - name: Restore project dependencies
+      - name: Restore .NET dependencies
         run: dotnet restore Infragistics.QueryBuilder.Executor.csproj
 
-      # Dedicated nested manifest keeps sbom-tool out of the root 'dotnet tool restore'.
+      # Dedicated nested manifest keeps sbom-tool out of the root 'dotnet tool restore' used by the sign steps.
       - name: Restore sbom-tool (pinned)
         run: dotnet tool restore --tool-manifest .config/sbom-tool/dotnet-tools.json
 
-      # sbom-tool fails unless the -m directory already exists.
-      - name: Create SBOM output directories
-        shell: pwsh
-        run: New-Item -ItemType Directory -Force -Path "${{ github.workspace }}\sbom\spdx-2.2", "${{ github.workspace }}\sbom\spdx-3.0" | Out-Null
-
       # -b is the signed package folder, so the shipped nupkg and its hash land in the SBOM's files section.
       # -bc scans the repository for the dependency graph; -li/-pm resolve license and supplier metadata.
-      - name: Generate SBOM (SPDX 2.2)
+      - name: Generate SBOMs
         working-directory: .config/sbom-tool
-        run: >
-          dotnet tool run sbom-tool -- generate
-          -b ${{ github.workspace }}/nupkg
-          -bc ${{ github.workspace }}
-          -m ${{ github.workspace }}/sbom/spdx-2.2
-          -pn Infragistics.QueryBuilder.Executor
-          -pv $env:VERSION
-          -ps "Infragistics Inc."
-          -nsb http://spdx.org/spdxdocs/Infragistics.QueryBuilder.Executor
-          -mi SPDX:2.2
-          -li true
-          -lto 60
-          -pm true
-          -V Information
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
 
-      - name: Generate SBOM (SPDX 3.0)
-        working-directory: .config/sbom-tool
-        run: >
-          dotnet tool run sbom-tool -- generate
-          -b ${{ github.workspace }}/nupkg
-          -bc ${{ github.workspace }}
-          -m ${{ github.workspace }}/sbom/spdx-3.0
-          -pn Infragistics.QueryBuilder.Executor
-          -pv $env:VERSION
-          -ps "Infragistics Inc."
-          -nsb http://spdx.org/spdxdocs/Infragistics.QueryBuilder.Executor
-          -mi SPDX:3.0
-          -li true
-          -lto 60
-          -pm true
-          -V Information
+          $formats = @(
+            @{ Version = 'SPDX:2.2'; Output = 'spdx-2.2' },
+            @{ Version = 'SPDX:3.0'; Output = 'spdx-3.0' }
+          )
+
+          foreach ($format in $formats) {
+            Write-Host "Generating $($format.Version) SBOM..."
+            dotnet tool run sbom-tool -- generate `
+              -b "$env:GITHUB_WORKSPACE\nupkg" `
+              -bc $env:GITHUB_WORKSPACE `
+              -m "$env:GITHUB_WORKSPACE\sbom\$($format.Output)" `
+              -pn Infragistics.QueryBuilder.Executor `
+              -pv $env:VERSION `
+              -ps "Infragistics Inc." `
+              -nsb http://spdx.org/spdxdocs/Infragistics.QueryBuilder.Executor `
+              -mi $format.Version `
+              -li true `
+              -lto $env:SBOM_LICENSE_TIMEOUT_SECONDS `
+              -pm true `
+              -V Information
+          }
 
       - name: Verify SBOM output
         shell: pwsh
@@ -404,9 +375,9 @@ jobs:
           $spdx22 = "${{ github.workspace }}\sbom\spdx-2.2\_manifest\spdx_2.2\manifest.spdx.json"
           $spdx30 = "${{ github.workspace }}\sbom\spdx-3.0\_manifest\spdx_3.0\manifest.spdx.json"
 
-          foreach ($document in @($spdx22, $spdx30)) {
-            if (-not (Test-Path -LiteralPath $document) -or (Get-Item -LiteralPath $document).Length -eq 0) {
-              throw "SBOM document missing or empty: $document"
+          foreach ($manifestPath in @($spdx22, $spdx30)) {
+            if (-not (Test-Path -LiteralPath $manifestPath) -or (Get-Item -LiteralPath $manifestPath).Length -eq 0) {
+              throw "SBOM manifest missing or empty: $manifestPath"
             }
           }
 
@@ -504,19 +475,6 @@ jobs:
 
       - name: Publish to NuGet.org
         run: dotnet nuget push "${{ github.workspace }}/nupkg/Infragistics.QueryBuilder.Executor.${env:VERSION}.nupkg" --api-key ${{ steps.nuget-login.outputs.NUGET_API_KEY }} --source "https://api.nuget.org/v3/index.json"
-
-      - name: Record published digest
-        shell: pwsh
-        env:
-          PACK_NUPKG_SHA256: ${{ needs.pack.outputs.nupkg-sha256 }}
-        run: |
-          @(
-            "### Published to NuGet.org",
-            ('`' + $env:PACK_NUPKG_SHA256 + '`'),
-            "",
-            "NuGet.org repository-signs every uploaded package, so the digest it serves differs from the one above.",
-            "Verify attestations against the .nupkg attached to this release."
-          ) | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY
 
   attach-to-release:
     name: Attach release evidence

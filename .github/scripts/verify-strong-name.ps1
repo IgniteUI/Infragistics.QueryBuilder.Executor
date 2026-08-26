@@ -5,8 +5,7 @@
 .DESCRIPTION
     'sn.exe -vf' proves only that an assembly's strong name is internally consistent, so any valid
     private key passes it. This script additionally compares each assembly's public key against a
-    value pinned in the repository and established out of band from the signing key, so a
-    substituted key fails the build instead of establishing an unintended binary identity.
+    value pinned in the repository and established out of band from the signing key.
 #>
 [CmdletBinding()]
 param(
@@ -18,7 +17,6 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-
 # Failures are aggregated per assembly, so sn.exe exit codes must not throw on their own.
 $PSNativeCommandUseErrorActionPreference = $false
 
@@ -47,8 +45,8 @@ if ($expectedPublicKeyHex -notmatch '^[0-9a-f]{320,}$' -or $expectedPublicKeyHex
 }
 
 $expectedPublicKey = [byte[]]::new($expectedPublicKeyHex.Length / 2)
-for ($i = 0; $i -lt $expectedPublicKey.Length; $i++) {
-    $expectedPublicKey[$i] = [Convert]::ToByte($expectedPublicKeyHex.Substring($i * 2, 2), 16)
+for ($index = 0; $index -lt $expectedPublicKey.Length; $index++) {
+    $expectedPublicKey[$index] = [Convert]::ToByte($expectedPublicKeyHex.Substring($index * 2, 2), 16)
 }
 
 # SHA-1 is not a security choice here; it is the algorithm that defines a strong-name token.
@@ -80,7 +78,6 @@ foreach ($assembly in $assemblies) {
     }
 
     $assemblyName = [System.Reflection.AssemblyName]::GetAssemblyName($assembly.FullName)
-
     $token = $assemblyName.GetPublicKeyToken()
     if ($null -eq $token -or $token.Length -eq 0) {
         $problems += "$($assembly.FullName): not strong named."
