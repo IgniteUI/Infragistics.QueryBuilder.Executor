@@ -19,24 +19,47 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v5
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
-      - name: Build
-        run: dotnet build Infragistics.QueryBuilder.Executor.csproj -c ${{ env.BUILD_CONFIGURATION }} /p:Version=${{ env.VERSION }}
+      - name: Restore strong-name key
+        shell: pwsh
+        env:
+          STRONG_NAME_KEY_BASE64: ${{ secrets.IG_STRONG_NAME_KEY }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:STRONG_NAME_KEY_BASE64)) {
+            throw "The IG_STRONG_NAME_KEY organization secret is empty or unavailable to this repository."
+          }
+
+          $keyBytes = [Convert]::FromBase64String($env:STRONG_NAME_KEY_BASE64)
+          [System.IO.File]::WriteAllBytes("${{ runner.temp }}\IG.StrongName.snk", $keyBytes)
+
+      - name: Build strong-named assemblies
+        shell: pwsh
+        run: |
+          dotnet build Infragistics.QueryBuilder.Executor.csproj `
+            -c ${{ env.BUILD_CONFIGURATION }} `
+            /p:Version=${{ env.VERSION }} `
+            /p:SignAssembly=true `
+            /p:AssemblyOriginatorKeyFile="${{ runner.temp }}\IG.StrongName.snk"
+
+      - name: Delete strong-name key
+        if: always()
+        shell: pwsh
+        run: Remove-Item "${{ runner.temp }}\IG.StrongName.snk" -Force -ErrorAction SilentlyContinue
 
       - name: Restore .NET local tools
         run: dotnet tool restore
 
       - name: Authenticate to Azure
-        uses: azure/login@532459ea530d8321f2fb9bb10d1e0bcf23869a43  # v3.0.0
+        uses: azure/login@f5d393ae46f8fde4be8b75f32e3fc50e654ad0ca  # v3.0.1
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
@@ -49,6 +72,8 @@ jobs:
           --base-directory "${{ github.workspace }}/bin/${{ env.BUILD_CONFIGURATION }}"
           --azure-key-vault-url "${{ secrets.AZURE_KEYVAULT_URL }}"
           --azure-key-vault-certificate "${{ secrets.AZURE_KEYVAULT_CERTIFICATE }}"
+          --azure-credential-type azure-cli
+          --verbosity Warning
 
       - name: Validate DLL signatures
         shell: pwsh
@@ -70,6 +95,50 @@ jobs:
       - name: Pack NuGet package
         run: dotnet pack ./Infragistics.QueryBuilder.Executor.csproj --no-build --no-restore --configuration ${{ env.BUILD_CONFIGURATION }} -p:PackageVersion=${{ env.VERSION }} -o "${{ github.workspace }}/nupkg"
 
+      - name: Validate packaged assembly strong names
+        shell: pwsh
+        run: |
+          $packagePath = "${{ github.workspace }}\nupkg\Infragistics.QueryBuilder.Executor.${{ env.VERSION }}.nupkg"
+          $validationRoot = "${{ runner.temp }}\strong-name-validation"
+          $archivePath = "$validationRoot\package.zip"
+          $extractPath = "$validationRoot\package"
+
+          try {
+            if (-not (Test-Path $packagePath)) {
+              throw "NuGet package not found: $packagePath"
+            }
+
+            New-Item -ItemType Directory -Path $validationRoot -Force | Out-Null
+            Copy-Item $packagePath $archivePath
+            Expand-Archive -Path $archivePath -DestinationPath $extractPath -Force
+
+            $assemblies = @(Get-ChildItem -Path $extractPath -Filter "*.dll" -Recurse)
+            if ($assemblies.Count -eq 0) {
+              throw "No assemblies were found in the NuGet package."
+            }
+
+            $windowsSdkRoot = Join-Path ${env:ProgramFiles(x86)} "Microsoft SDKs\Windows"
+            $strongNameTool = Get-ChildItem -Path $windowsSdkRoot -Filter "sn.exe" -Recurse |
+              Sort-Object FullName -Descending |
+              Select-Object -First 1
+
+            if ($null -eq $strongNameTool) {
+              throw "Could not find sn.exe in the Windows SDK."
+            }
+
+            foreach ($assembly in $assemblies) {
+              & $strongNameTool.FullName -vf $assembly.FullName
+              if ($LASTEXITCODE -ne 0) {
+                throw "Strong-name verification failed: $($assembly.FullName)"
+              }
+            }
+
+            Write-Host "Verified $($assemblies.Count) strong-name signed package assemblies."
+          }
+          finally {
+            Remove-Item $validationRoot -Recurse -Force -ErrorAction SilentlyContinue
+          }
+
       - name: Sign NuGet package
         shell: pwsh
         run: >
@@ -77,9 +146,12 @@ jobs:
           --base-directory "${{ github.workspace }}/nupkg"
           --azure-key-vault-url "${{ secrets.AZURE_KEYVAULT_URL }}"
           --azure-key-vault-certificate "${{ secrets.AZURE_KEYVAULT_CERTIFICATE }}"
+          --azure-credential-type azure-cli
+          --recurse-containers false
+          --verbosity Warning
 
       - name: Validate NuGet package signature
-        run: dotnet nuget verify "${{ github.workspace }}/nupkg/Infragistics.QueryBuilder.Executor.${{ env.VERSION }}.nupkg"
+        run: dotnet nuget verify "${{ github.workspace }}/nupkg/Infragistics.QueryBuilder.Executor.${{ env.VERSION }}.nupkg" --verbosity quiet
 
       - name: NuGet login (OIDC Trusted Publishing)
         uses: NuGet/login@8d196754b4036150537f80ac539e15c2f1028841   # v1
