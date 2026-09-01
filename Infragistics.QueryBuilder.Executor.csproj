@@ -8,9 +8,9 @@
     <Authors>Infragistics Inc.</Authors>
     <Owners>Infragistics Inc.</Owners>
     <Company>Infragistics Inc.</Company>
-    <Description>A .NET 9 library for dynamic, strongly-typed query building and execution over Entity Framework Core data sources. Supports advanced filtering, projection, and SQL generation.</Description>
-    <Version>1.0.0.0</Version>
-    <!-->We want to generate the version attributes at runtime and we need this flag enabled for that<-->
+    <Description>A .NET library for dynamic, strongly-typed query building and execution over Entity Framework Core data sources. Supports advanced filtering, projection, and SQL generation.</Description>
+    <Version>1.0.0</Version>
+    <!-- Required so the version attributes are generated into the assembly. -->
     <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
@@ -23,17 +23,23 @@
     <PackageDocumentationUrl>https://github.com/IgniteUI/Infragistics.QueryBuilder.Executor</PackageDocumentationUrl>
     <PackageTags>Infragistics;App Builder;Ignite UI;Filtering;Query;Query Builder;Models</PackageTags>
     <PackageIcon>IgniteUI.png</PackageIcon>
+    <Deterministic>true</Deterministic>
+    <!-- Ensures the nuspec's <repository> element carries a commit, not just a url, when
+         RepositoryCommit is passed explicitly at pack time (see build-and-publish.yml). -->
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="AutoMapper" Version="14.0.0" />
     <PackageReference Include="Microsoft.EntityFrameworkCore" Version="9.0.4" />
     <PackageReference Include="Swashbuckle.AspNetCore.SwaggerGen" Version="8.1.1" />
+  </ItemGroup>
+
+  <ItemGroup>
     <None Include="IgniteUI.png" Pack="true" PackagePath="" />
-        <None Include="ReadMe.md">
-            <Pack>True</Pack>
-            <PackagePath></PackagePath>
-        </None>
+    <None Include="ReadMe.md" Pack="true" PackagePath="" />
+    <None Include="LICENSE" Pack="true" PackagePath="" />
   </ItemGroup>
 
 </Project>
