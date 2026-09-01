@@ -180,6 +180,11 @@ jobs:
           path: .
           digest-mismatch: error
 
+      # Pack re-resolves package assets whenever the downloaded obj cache is treated as stale, and
+      # then needs the packages on this runner. Restoring is not a rebuild: the signed DLLs stand.
+      - name: Restore .NET dependencies
+        run: dotnet restore ${{ env.PROJECT_PATH }}
+
       # Repository url and commit are passed explicitly so the nuspec never carries a commit
       # without a url (or vice versa) depending on what the checkout leaves in .git.
       - name: Pack NuGet package
