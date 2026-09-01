@@ -69,8 +69,7 @@ try {
             -mi $format.Version `
             -li $ResolveLicenses.ToString().ToLowerInvariant() `
             -lto $LicenseTimeoutSeconds `
-            -pm true `
-            -V Information
+            -pm true
     }
 }
 finally {

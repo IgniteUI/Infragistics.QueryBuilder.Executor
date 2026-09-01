@@ -37,6 +37,10 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Validate release tag
+        shell: pwsh
+        run: .github/scripts/Assert-ReleaseVersion.ps1 -Version "$env:VERSION"
+
       - name: Setup .NET
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
@@ -63,15 +67,10 @@ jobs:
           dotnet build ${{ env.PROJECT_PATH }}
           --configuration ${{ env.BUILD_CONFIGURATION }}
           --no-restore
-          -p:Version=${{ env.VERSION }}
+          "-p:Version=$env:VERSION"
           -p:ContinuousIntegrationBuild=true
           -p:SignAssembly=true
           -p:AssemblyOriginatorKeyFile="${{ runner.temp }}\IG.StrongName.snk"
-
-      - name: Delete strong-name key
-        if: always()
-        shell: pwsh
-        run: Remove-Item "${{ runner.temp }}\IG.StrongName.snk" -Force -ErrorAction SilentlyContinue
 
       - name: Upload build output
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -184,12 +183,13 @@ jobs:
       # Repository url and commit are passed explicitly so the nuspec never carries a commit
       # without a url (or vice versa) depending on what the checkout leaves in .git.
       - name: Pack NuGet package
+        shell: pwsh
         run: >
           dotnet pack ${{ env.PROJECT_PATH }}
           --configuration ${{ env.BUILD_CONFIGURATION }}
           --no-build
           --no-restore
-          -p:PackageVersion=${{ env.VERSION }}
+          "-p:PackageVersion=$env:VERSION"
           -p:RepositoryUrl=${{ env.REPOSITORY_URL }}
           -p:RepositoryType=git
           -p:RepositoryCommit=${{ github.sha }}
@@ -199,7 +199,7 @@ jobs:
         shell: pwsh
         run: >
           .github/scripts/Assert-PackageStrongName.ps1
-          -PackagePath "${{ github.workspace }}/artifacts/${{ env.PACKAGE_ID }}.${{ env.VERSION }}.nupkg"
+          -PackagePath "${env:GITHUB_WORKSPACE}/artifacts/${env:PACKAGE_ID}.${env:VERSION}.nupkg"
           -ExpectedPublicKeyPath "${{ env.EXPECTED_PUBLIC_KEY_PATH }}"
           -WorkingDirectory "${{ runner.temp }}/strong-name-validation"
 
@@ -207,11 +207,11 @@ jobs:
         shell: pwsh
         run: >
           .github/scripts/Assert-NuspecRepository.ps1
-          -PackagePath "${{ github.workspace }}/artifacts/${{ env.PACKAGE_ID }}.${{ env.VERSION }}.nupkg"
+          -PackagePath "${env:GITHUB_WORKSPACE}/artifacts/${env:PACKAGE_ID}.${env:VERSION}.nupkg"
           -ExpectedRepositoryUrl "${{ env.REPOSITORY_URL }}"
           -ExpectedCommit "${{ github.sha }}"
           -ExpectedPackageId "${{ env.PACKAGE_ID }}"
-          -ExpectedVersion "${{ env.VERSION }}"
+          -ExpectedVersion "$env:VERSION"
 
       - name: Restore .NET local tools
         run: dotnet tool restore
@@ -235,7 +235,11 @@ jobs:
           --verbosity Warning
 
       - name: Validate NuGet package signature
-        run: dotnet nuget verify "${{ github.workspace }}/artifacts/${{ env.PACKAGE_ID }}.${{ env.VERSION }}.nupkg" --verbosity quiet
+        shell: pwsh
+        run: >
+          .github/scripts/Assert-NuGetSignature.ps1
+          -PackagePath "${env:GITHUB_WORKSPACE}/artifacts/${env:PACKAGE_ID}.${env:VERSION}.nupkg"
+          -ExpectedCertificateSha256Path "${{ env.EXPECTED_CERT_SHA256_PATH }}"
 
       # This digest is the identity every downstream job re-checks before acting on the package.
       - name: Record package digest
@@ -243,7 +247,7 @@ jobs:
         shell: pwsh
         run: >
           .github/scripts/Get-PackageDigest.ps1
-          -PackagePath "${{ github.workspace }}/artifacts/${{ env.PACKAGE_ID }}.${{ env.VERSION }}.nupkg"
+          -PackagePath "${env:GITHUB_WORKSPACE}/artifacts/${env:PACKAGE_ID}.${env:VERSION}.nupkg"
           -WriteChecksumFile
           -GitHubOutputName 'nupkg-sha256'
           -SummaryTitle 'Signed package digest'
@@ -284,7 +288,7 @@ jobs:
           -ProjectPath "${{ env.PROJECT_PATH }}"
           -OutputDirectory "${{ github.workspace }}/artifacts/dependency-scan"
           -PackageId "${{ env.PACKAGE_ID }}"
-          -Version "${{ env.VERSION }}"
+          -Version "$env:VERSION"
 
       - name: Upload dependency scan
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -327,7 +331,7 @@ jobs:
         shell: pwsh
         run: >
           .github/scripts/Get-PackageDigest.ps1
-          -PackagePath "${{ github.workspace }}/artifacts/${{ env.PACKAGE_ID }}.${{ env.VERSION }}.nupkg"
+          -PackagePath "${env:GITHUB_WORKSPACE}/artifacts/${env:PACKAGE_ID}.${env:VERSION}.nupkg"
           -ExpectedSha256 "${{ needs.pack.outputs.nupkg-sha256 }}"
 
       - name: Restore .NET dependencies
@@ -342,7 +346,7 @@ jobs:
         run: >
           .github/scripts/New-Sbom.ps1
           -PackageId "${{ env.PACKAGE_ID }}"
-          -PackageVersion "${{ env.VERSION }}"
+          -PackageVersion "$env:VERSION"
           -BuildDropPath "${{ github.workspace }}/artifacts"
           -BuildComponentPath "${{ github.workspace }}"
           -OutputRoot "${{ github.workspace }}/sbom"
@@ -353,7 +357,7 @@ jobs:
         run: >
           .github/scripts/Assert-Sbom.ps1
           -OutputRoot "${{ github.workspace }}/sbom"
-          -ExpectedFileName "${{ env.PACKAGE_ID }}.${{ env.VERSION }}.nupkg"
+          -ExpectedPackagePath "${env:GITHUB_WORKSPACE}/artifacts/${env:PACKAGE_ID}.${env:VERSION}.nupkg"
 
       # An attestation binds to a digest rather than a path, so the bytes are re-hashed here and that
       # value is what gets attested, re-checked before publishing, and reported on the release.
@@ -362,7 +366,7 @@ jobs:
         shell: pwsh
         run: >
           .github/scripts/Get-PackageDigest.ps1
-          -PackagePath "${{ github.workspace }}/artifacts/${{ env.PACKAGE_ID }}.${{ env.VERSION }}.nupkg"
+          -PackagePath "${env:GITHUB_WORKSPACE}/artifacts/${env:PACKAGE_ID}.${env:VERSION}.nupkg"
           -ExpectedSha256 "${{ needs.pack.outputs.nupkg-sha256 }}"
           -FailureMessage 'Package changed before attestation.'
           -GitHubOutputName 'nupkg-sha256'
@@ -418,7 +422,9 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          sparse-checkout: .github/scripts
+          sparse-checkout: |
+            .github/scripts
+            eng/IG.authenticode-certificates.sha256
           sparse-checkout-cone-mode: false
 
       - name: Setup .NET
@@ -436,12 +442,16 @@ jobs:
         shell: pwsh
         run: >
           .github/scripts/Get-PackageDigest.ps1
-          -PackagePath "${{ github.workspace }}/artifacts/${{ env.PACKAGE_ID }}.${{ env.VERSION }}.nupkg"
+          -PackagePath "${env:GITHUB_WORKSPACE}/artifacts/${env:PACKAGE_ID}.${env:VERSION}.nupkg"
           -ExpectedSha256 "${{ needs.pack.outputs.nupkg-sha256 }}","${{ needs.sbom.outputs.attested-sha256 }}"
           -FailureMessage 'Refusing to publish.'
 
       - name: Validate NuGet package signature
-        run: dotnet nuget verify "${{ github.workspace }}/artifacts/${{ env.PACKAGE_ID }}.${{ env.VERSION }}.nupkg" --verbosity quiet
+        shell: pwsh
+        run: >
+          .github/scripts/Assert-NuGetSignature.ps1
+          -PackagePath "${env:GITHUB_WORKSPACE}/artifacts/${env:PACKAGE_ID}.${env:VERSION}.nupkg"
+          -ExpectedCertificateSha256Path "${{ env.EXPECTED_CERT_SHA256_PATH }}"
 
       - name: NuGet login (OIDC Trusted Publishing)
         uses: NuGet/login@8d196754b4036150537f80ac539e15c2f1028841 # v1
@@ -458,9 +468,9 @@ jobs:
           NUGET_API_KEY: ${{ steps.nuget-login.outputs.NUGET_API_KEY }}
         run: >
           .github/scripts/Publish-NuGetPackage.ps1
-          -PackagePath "${{ github.workspace }}/artifacts/${{ env.PACKAGE_ID }}.${{ env.VERSION }}.nupkg"
+          -PackagePath "${env:GITHUB_WORKSPACE}/artifacts/${env:PACKAGE_ID}.${env:VERSION}.nupkg"
           -PackageId "${{ env.PACKAGE_ID }}"
-          -Version "${{ env.VERSION }}"
+          -Version "$env:VERSION"
 
   attach-to-release:
     name: Attach release evidence
