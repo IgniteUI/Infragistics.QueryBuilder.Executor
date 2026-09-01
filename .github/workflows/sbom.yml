@@ -1,8 +1,9 @@
 name: Generate SBOM
 
 # Dry run for the SBOM that build-and-publish.yml produces at release time, so flag changes can be
-# reviewed on a PR. The package packed here is unsigned, so nothing is attested or published:
-# provenance and SBOM attestations must bind to the signed package digest.
+# reviewed on a PR. It runs the same scripts the release does. The package packed here is unsigned,
+# so nothing is attested or published: provenance and SBOM attestations must bind to the signed
+# package digest.
 on:
   pull_request:
     types: [labeled]
@@ -17,7 +18,10 @@ concurrency:
 env:
   BUILD_CONFIGURATION: Release
   DOTNET_VERSION: '9.x'
+  PACKAGE_ID: Infragistics.QueryBuilder.Executor
+  PROJECT_PATH: Infragistics.QueryBuilder.Executor.csproj
   PACKAGE_VERSION: 0.0.0-pr.${{ github.event.pull_request.number }}
+  SBOM_LICENSE_TIMEOUT_SECONDS: '180'
 
 jobs:
   sbom:
@@ -27,7 +31,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -38,64 +42,32 @@ jobs:
 
       - name: Pack NuGet package
         run: >
-          dotnet pack Infragistics.QueryBuilder.Executor.csproj
+          dotnet pack ${{ env.PROJECT_PATH }}
           --configuration ${{ env.BUILD_CONFIGURATION }}
           -p:Version=${{ env.PACKAGE_VERSION }}
-          -o ./artifacts
+          -o "${{ github.workspace }}/artifacts"
 
       # Dedicated nested manifest keeps sbom-tool out of the root 'dotnet tool restore' used by build-and-publish.yml
       - name: Restore sbom-tool (pinned)
         run: dotnet tool restore --tool-manifest .config/sbom-tool/dotnet-tools.json
 
-      # sbom-tool fails unless the -m directory already exists.
-      - name: Create SBOM output directories
-        run: mkdir -p sbom/spdx-2.2 sbom/spdx-3.0
-
-      # -b: the packed nupkg gets listed with its hash in the SBOM's files section
-      # -bc: dependency detection scans the repo root (csproj)
-      # -li/-pm: resolve license and supplier metadata for the detected packages
-      - name: Generate SBOM (SPDX 2.2)
-        working-directory: .config/sbom-tool
+      - name: Generate SBOMs
+        shell: pwsh
         run: >
-          dotnet tool run sbom-tool -- generate
-          -b ${{ github.workspace }}/artifacts
-          -bc ${{ github.workspace }}
-          -m ${{ github.workspace }}/sbom/spdx-2.2
-          -pn Infragistics.QueryBuilder.Executor
-          -pv ${{ env.PACKAGE_VERSION }}
-          -ps "Infragistics Inc."
-          -nsb http://spdx.org/spdxdocs/Infragistics.QueryBuilder.Executor
-          -mi SPDX:2.2
-          -li true
-          -lto 60
-          -pm true
-          -V Information
+          .github/scripts/New-Sbom.ps1
+          -PackageId "${{ env.PACKAGE_ID }}"
+          -PackageVersion "${{ env.PACKAGE_VERSION }}"
+          -BuildDropPath "${{ github.workspace }}/artifacts"
+          -BuildComponentPath "${{ github.workspace }}"
+          -OutputRoot "${{ github.workspace }}/sbom"
+          -LicenseTimeoutSeconds ${{ env.SBOM_LICENSE_TIMEOUT_SECONDS }}
 
-      - name: Generate SBOM (SPDX 3.0)
-        working-directory: .config/sbom-tool
+      - name: Verify SBOM output
+        shell: pwsh
         run: >
-          dotnet tool run sbom-tool -- generate
-          -b ${{ github.workspace }}/artifacts
-          -bc ${{ github.workspace }}
-          -m ${{ github.workspace }}/sbom/spdx-3.0
-          -pn Infragistics.QueryBuilder.Executor
-          -pv ${{ env.PACKAGE_VERSION }}
-          -ps "Infragistics Inc."
-          -nsb http://spdx.org/spdxdocs/Infragistics.QueryBuilder.Executor
-          -mi SPDX:3.0
-          -li true
-          -lto 60
-          -pm true
-          -V Information
-
-      - name: Verify SBOM
-        run: |
-          set -euo pipefail
-          test -s sbom/spdx-2.2/_manifest/spdx_2.2/manifest.spdx.json
-          test -s sbom/spdx-2.2/_manifest/spdx_2.2/manifest.spdx.json.sha256
-          test -s sbom/spdx-3.0/_manifest/spdx_3.0/manifest.spdx.json
-          test -s sbom/spdx-3.0/_manifest/spdx_3.0/manifest.spdx.json.sha256
-          echo "SBOM generated successfully."
+          .github/scripts/Assert-Sbom.ps1
+          -OutputRoot "${{ github.workspace }}/sbom"
+          -ExpectedFileName "${{ env.PACKAGE_ID }}.${{ env.PACKAGE_VERSION }}.nupkg"
 
       - name: Upload SBOM files
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
