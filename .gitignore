@@ -63,6 +63,9 @@ project.lock.json
 project.fragment.lock.json
 artifacts/
 
+# SBOMs produced by .github/scripts/New-Sbom.ps1
+sbom/
+
 # ASP.NET Scaffolding
 ScaffoldingReadMe.txt
 
