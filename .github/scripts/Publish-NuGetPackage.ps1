@@ -5,7 +5,7 @@
 .DESCRIPTION
     Deliberately not --skip-duplicate: a rerun produces newly signed bytes, so skipping the duplicate
     would attach this run's SBOM, attestations and checksum to a release whose published package is a
-    different build. The API key is read from NUGET_API_KEY so it never appears in a command line.
+    different build. The API key is sourced from NUGET_API_KEY rather than embedded in the workflow command.
 #>
 [CmdletBinding()]
 param(
