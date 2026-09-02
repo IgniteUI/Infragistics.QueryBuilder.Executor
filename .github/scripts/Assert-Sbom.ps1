@@ -5,6 +5,11 @@
 .DESCRIPTION
     Requires parseable, structurally valid documents, verifies each manifest against its SHA-256 sidecar,
     and proves that the SPDX 2.2 file entry describes the exact package bytes being released.
+
+    Also guards the two failure modes sbom-tool does not report: a manifest that ended up inside the
+    component scan root and so describes itself, and a ClearlyDefined outage that silently replaces every
+    license with NOASSERTION. Missing licenses are reported rather than fatal - NOASSERTION is a valid
+    SPDX value and the upstream tool offers no way to require otherwise.
 #>
 [CmdletBinding()]
 param(
@@ -12,7 +17,11 @@ param(
     [string]$OutputRoot,
 
     [Parameter(Mandatory)]
-    [string]$ExpectedPackagePath
+    [string]$ExpectedPackagePath,
+
+    # Below this share of packages carrying a resolved license, the run is annotated rather than failed.
+    [ValidateRange(0, 1)]
+    [double]$MinimumLicenseCoverage = 0.8
 )
 
 $ErrorActionPreference = 'Stop'
@@ -20,11 +29,11 @@ $ErrorActionPreference = 'Stop'
 $manifests = @(
     [pscustomobject]@{
         Name = 'SPDX 2.2'
-        Path = Join-Path $OutputRoot 'spdx-2.2/_manifest/spdx_2.2/manifest.spdx.json'
+        Path = Join-Path $OutputRoot '_manifest/spdx_2.2/manifest.spdx.json'
     },
     [pscustomobject]@{
         Name = 'SPDX 3.0'
-        Path = Join-Path $OutputRoot 'spdx-3.0/_manifest/spdx_3.0/manifest.spdx.json'
+        Path = Join-Path $OutputRoot '_manifest/spdx_3.0/manifest.spdx.json'
     }
 )
 
@@ -89,6 +98,25 @@ if ($documents.ContainsKey('SPDX 3.0')) {
     }
 }
 
+if ($documents.ContainsKey('SPDX 2.2') -and $documents.ContainsKey('SPDX 3.0')) {
+    $graph = @($documents['SPDX 3.0'].'@graph')
+
+    # Either document describing an SBOM manifest means the output landed inside the scanned tree.
+    $selfReferences = @(
+        @($documents['SPDX 2.2'].files | Where-Object { $_.fileName -like '*manifest.spdx.json' }) +
+        @($graph | Where-Object { $_.type -eq 'software_File' -and $_.name -like '*manifest.spdx.json' })
+    )
+    if ($selfReferences.Count -gt 0) {
+        $problems += "The SBOMs describe $($selfReferences.Count) SBOM manifest file(s) as build content. Generate them outside the component scan root."
+    }
+
+    $packages22 = @($documents['SPDX 2.2'].packages).Count
+    $packages30 = @($graph | Where-Object { $_.type -eq 'software_Package' }).Count
+    if ($packages22 -ne $packages30) {
+        $problems += "SPDX 2.2 records $packages22 packages but SPDX 3.0 records $packages30. The two formats must describe the same build."
+    }
+}
+
 if (-not (Test-Path -LiteralPath $ExpectedPackagePath -PathType Leaf)) {
     $problems += "Expected NuGet package missing: $ExpectedPackagePath"
 }
@@ -121,4 +149,19 @@ if ($problems.Count -gt 0) {
     throw "SBOM validation failed:`n- $($problems -join "`n- ")"
 }
 
-Write-Host "SBOM covers $(@($documents['SPDX 2.2'].packages).Count) packages and $(@($documents['SPDX 2.2'].files).Count) files, including the verified NuGet package."
+$packages = @($documents['SPDX 2.2'].packages)
+$licensed = @($packages | Where-Object { $_.licenseConcluded -and $_.licenseConcluded -ne 'NOASSERTION' })
+$coverage = if ($packages.Count -gt 0) { $licensed.Count / $packages.Count } else { 0 }
+
+Write-Host "SBOM covers $($packages.Count) packages and $(@($documents['SPDX 2.2'].files).Count) files, including the verified NuGet package."
+Write-Host "License coverage: $($licensed.Count) of $($packages.Count) packages ($([math]::Round($coverage * 100))%)."
+
+if ($coverage -lt $MinimumLicenseCoverage) {
+    $unlicensed = @($packages | Where-Object { -not $_.licenseConcluded -or $_.licenseConcluded -eq 'NOASSERTION' } | ForEach-Object { "$($_.name)@$($_.versionInfo)" })
+    Write-Warning "Only $([math]::Round($coverage * 100))% of packages carry a resolved license (threshold $([math]::Round($MinimumLicenseCoverage * 100))%). Unresolved: $($unlicensed -join ', ')"
+}
+
+$reciprocal = @($packages | Where-Object { $_.licenseConcluded -match 'GPL|RPL|MPL|EPL|CDDL|OSL|SSPL' })
+if ($reciprocal.Count -gt 0) {
+    Write-Warning "Reciprocal or copyleft licenses detected: $(($reciprocal | ForEach-Object { "$($_.name)@$($_.versionInfo) ($($_.licenseConcluded))" }) -join '; ')"
+}

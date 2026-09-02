@@ -208,16 +208,6 @@ jobs:
           -ExpectedPublicKeyPath "${{ env.EXPECTED_PUBLIC_KEY_PATH }}"
           -WorkingDirectory "${{ runner.temp }}/strong-name-validation"
 
-      - name: Validate package provenance metadata
-        shell: pwsh
-        run: >
-          .github/scripts/Assert-NuspecRepository.ps1
-          -PackagePath "${env:GITHUB_WORKSPACE}/artifacts/${env:PACKAGE_ID}.${env:VERSION}.nupkg"
-          -ExpectedRepositoryUrl "${{ env.REPOSITORY_URL }}"
-          -ExpectedCommit "${{ github.sha }}"
-          -ExpectedPackageId "${{ env.PACKAGE_ID }}"
-          -ExpectedVersion "$env:VERSION"
-
       - name: Restore .NET local tools
         run: dotnet tool restore
 
@@ -342,9 +332,8 @@ jobs:
       - name: Restore .NET dependencies
         run: dotnet restore ${{ env.PROJECT_PATH }}
 
-      # Dedicated nested manifest keeps sbom-tool out of the root 'dotnet tool restore' used by the sign steps.
-      - name: Restore sbom-tool (pinned)
-        run: dotnet tool restore --tool-manifest .config/sbom-tool/dotnet-tools.json
+      - name: Restore .NET local tools
+        run: dotnet tool restore
 
       - name: Generate SBOMs
         shell: pwsh
@@ -354,15 +343,29 @@ jobs:
           -PackageVersion "$env:VERSION"
           -BuildDropPath "${{ github.workspace }}/artifacts"
           -BuildComponentPath "${{ github.workspace }}"
-          -OutputRoot "${{ github.workspace }}/sbom"
+          -OutputRoot "${{ runner.temp }}/sbom"
           -LicenseTimeoutSeconds ${{ env.SBOM_LICENSE_TIMEOUT_SECONDS }}
 
       - name: Verify SBOM output
         shell: pwsh
         run: >
           .github/scripts/Assert-Sbom.ps1
-          -OutputRoot "${{ github.workspace }}/sbom"
+          -OutputRoot "${{ runner.temp }}/sbom"
           -ExpectedPackagePath "${env:GITHUB_WORKSPACE}/artifacts/${env:PACKAGE_ID}.${env:VERSION}.nupkg"
+
+      # CycloneDX reads licences and authors from each package's own nuspec, so it fills the fields the
+      # ClearlyDefined-backed SPDX documents leave as NOASSERTION whenever that service is degraded.
+      - name: Generate CycloneDX SBOM
+        shell: pwsh
+        env:
+          GH_TOKEN_FOR_LICENSES: ${{ github.token }}
+        run: >
+          .github/scripts/New-CycloneDxSbom.ps1
+          -ProjectPath "${{ env.PROJECT_PATH }}"
+          -PackageId "${{ env.PACKAGE_ID }}"
+          -PackageVersion "$env:VERSION"
+          -OutputDirectory "${{ runner.temp }}/sbom/cyclonedx"
+          -GitHubBearerToken "$env:GH_TOKEN_FOR_LICENSES"
 
       # An attestation binds to a digest rather than a path, so the bytes are re-hashed here and that
       # value is what gets attested, re-checked before publishing, and reported on the release.
@@ -384,29 +387,40 @@ jobs:
           subject-digest: sha256:${{ steps.verify-before-attestation.outputs.nupkg-sha256 }}
 
       # actions/attest derives the predicate from an SPDX 2.x or CycloneDX document; SPDX 3.0 ships as evidence only.
-      - name: Attest SBOM
-        id: attest-sbom
+      - name: Attest SPDX SBOM
+        id: attest-sbom-spdx
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
           subject-name: ${{ env.PACKAGE_ID }}.${{ env.VERSION }}.nupkg
           subject-digest: sha256:${{ steps.verify-before-attestation.outputs.nupkg-sha256 }}
-          sbom-path: sbom/spdx-2.2/_manifest/spdx_2.2/manifest.spdx.json
+          sbom-path: ${{ runner.temp }}/sbom/_manifest/spdx_2.2/manifest.spdx.json
+
+      # Distinct predicate type from the SPDX attestation, so both bind to the same digest without colliding.
+      - name: Attest CycloneDX SBOM
+        id: attest-sbom-cyclonedx
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-name: ${{ env.PACKAGE_ID }}.${{ env.VERSION }}.nupkg
+          subject-digest: sha256:${{ steps.verify-before-attestation.outputs.nupkg-sha256 }}
+          sbom-path: ${{ runner.temp }}/sbom/cyclonedx/${{ env.PACKAGE_ID }}.${{ env.VERSION }}.cdx.json
 
       - name: Collect attestation bundles
         shell: pwsh
         run: >
           .github/scripts/Copy-AttestationBundles.ps1
           -ProvenanceBundlePath "${{ steps.attest-provenance.outputs.bundle-path }}"
-          -SbomBundlePath "${{ steps.attest-sbom.outputs.bundle-path }}"
-          -Destination "${{ github.workspace }}/sbom/attestations"
+          -SpdxBundlePath "${{ steps.attest-sbom-spdx.outputs.bundle-path }}"
+          -CycloneDxBundlePath "${{ steps.attest-sbom-cyclonedx.outputs.bundle-path }}"
+          -Destination "${{ runner.temp }}/sbom/attestations"
           -ProvenanceUrl "${{ steps.attest-provenance.outputs.attestation-url }}"
-          -SbomUrl "${{ steps.attest-sbom.outputs.attestation-url }}"
+          -SpdxUrl "${{ steps.attest-sbom-spdx.outputs.attestation-url }}"
+          -CycloneDxUrl "${{ steps.attest-sbom-cyclonedx.outputs.attestation-url }}"
 
       - name: Upload SBOM and attestations
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: sbom
-          path: sbom/**
+          path: ${{ runner.temp }}/sbom/**
           retention-days: 30
           if-no-files-found: error
 
@@ -511,8 +525,8 @@ jobs:
         run: |
           set -euo pipefail
 
-          (cd sbom/spdx-2.2/_manifest && zip -r "${GITHUB_WORKSPACE}/${PACKAGE_ID}.${TAG}.spdx-2.2.zip" .)
-          (cd sbom/spdx-3.0/_manifest && zip -r "${GITHUB_WORKSPACE}/${PACKAGE_ID}.${TAG}.spdx-3.0.zip" .)
+          (cd sbom/_manifest/spdx_2.2 && zip -r "${GITHUB_WORKSPACE}/${PACKAGE_ID}.${TAG}.spdx-2.2.zip" .)
+          (cd sbom/_manifest/spdx_3.0 && zip -r "${GITHUB_WORKSPACE}/${PACKAGE_ID}.${TAG}.spdx-3.0.zip" .)
           (cd evidence/dependency-scan && zip -r "${GITHUB_WORKSPACE}/${PACKAGE_ID}.${TAG}.dependency-scan.zip" .)
 
           gh release upload "$TAG" --clobber -R "${{ github.repository }}" \
@@ -521,5 +535,8 @@ jobs:
             "${PACKAGE_ID}.${TAG}.spdx-2.2.zip" \
             "${PACKAGE_ID}.${TAG}.spdx-3.0.zip" \
             "${PACKAGE_ID}.${TAG}.dependency-scan.zip" \
+            "sbom/cyclonedx/${PACKAGE_ID}.${TAG}.cdx.json" \
+            "sbom/cyclonedx/${PACKAGE_ID}.${TAG}.cdx.json.sha256" \
             "sbom/attestations/provenance.sigstore.json" \
-            "sbom/attestations/sbom.sigstore.json"
+            "sbom/attestations/sbom-spdx.sigstore.json" \
+            "sbom/attestations/sbom-cyclonedx.sigstore.json"

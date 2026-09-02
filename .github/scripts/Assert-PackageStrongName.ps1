@@ -32,7 +32,7 @@ try {
     Copy-Item -LiteralPath $PackagePath -Destination $archivePath -Force
     Expand-Archive -LiteralPath $archivePath -DestinationPath $extractPath -Force
 
-    & (Join-Path $PSScriptRoot 'verify-strong-name.ps1') -Path $extractPath -ExpectedPublicKeyPath $ExpectedPublicKeyPath
+    & (Join-Path $PSScriptRoot 'Assert-AssemblyStrongName.ps1') -Path $extractPath -ExpectedPublicKeyPath $ExpectedPublicKeyPath
 }
 finally {
     Remove-Item -LiteralPath $WorkingDirectory -Recurse -Force -ErrorAction SilentlyContinue
