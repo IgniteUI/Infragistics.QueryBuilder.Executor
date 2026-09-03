@@ -63,7 +63,36 @@ if (-not $NamespaceBaseUri) {
 $resolvedOutputRoot = [System.IO.Path]::GetFullPath($OutputRoot)
 $resolvedComponentPath = [System.IO.Path]::GetFullPath($BuildComponentPath)
 
-if ($resolvedOutputRoot.StartsWith($resolvedComponentPath, [System.StringComparison]::OrdinalIgnoreCase)) {
+function Test-PathIsWithin {
+    param(
+        [Parameter(Mandatory)]
+        [string]$Path,
+
+        [Parameter(Mandatory)]
+        [string]$PotentialParent
+    )
+
+    # Compares directory segments rather than a raw string prefix, so a sibling directory whose name
+    # merely starts with the same characters (e.g. 'repo-output' next to 'repo') is not flagged as nested.
+    [char[]]$separators = [System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar
+    $pathSegments = $Path.Split($separators, [System.StringSplitOptions]::RemoveEmptyEntries)
+    $parentSegments = $PotentialParent.Split($separators, [System.StringSplitOptions]::RemoveEmptyEntries)
+
+    if ($pathSegments.Count -lt $parentSegments.Count) {
+        return $false
+    }
+
+    for ($i = 0; $i -lt $parentSegments.Count; $i++) {
+        # PowerShell string comparison operators are case-insensitive by default.
+        if ($pathSegments[$i] -ne $parentSegments[$i]) {
+            return $false
+        }
+    }
+
+    return $true
+}
+
+if (Test-PathIsWithin -Path $resolvedOutputRoot -PotentialParent $resolvedComponentPath) {
     throw "OutputRoot '$resolvedOutputRoot' is inside BuildComponentPath '$resolvedComponentPath'. The generated manifests would be scanned as components of the build."
 }
 

@@ -88,6 +88,8 @@ if ($components.Count -eq 0) {
 }
 
 $licensed = @($components | Where-Object { $_.licenses })
+# CycloneDX models 'authors' (people, from the nuspec author metadata) and 'supplier' (an organisation)
+# separately; cyclonedx-dotnet only ever populates the former, so this is reported as author coverage.
 $authored = @($components | Where-Object { $_.authors })
 $coverage = $licensed.Count / $components.Count
 
@@ -97,7 +99,7 @@ Move-Item -LiteralPath $bomPath -Destination $renamedPath -Force
 $checksum = (Get-FileHash -LiteralPath $renamedPath -Algorithm SHA256).Hash.ToLowerInvariant()
 Set-Content -LiteralPath "$renamedPath.sha256" -Value $checksum -NoNewline
 
-Write-Host "CycloneDX $($bom.specVersion): $($components.Count) components, $($licensed.Count) licensed, $($authored.Count) with a supplier, $(@($bom.dependencies).Count) dependency edges."
+Write-Host "CycloneDX $($bom.specVersion): $($components.Count) components, $($licensed.Count) licensed, $($authored.Count) with an author, $(@($bom.dependencies).Count) dependency edges."
 
 if ($coverage -lt $MinimumLicenseCoverage) {
     $unlicensed = @($components | Where-Object { -not $_.licenses } | ForEach-Object { "$($_.name)@$($_.version)" })
