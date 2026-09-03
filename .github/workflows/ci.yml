@@ -13,26 +13,59 @@ on:
   workflow_dispatch:
 
 jobs:
+  # Blocks a pull request that would introduce a High or Critical advisory. Pushes to master skip it —
+  # the action needs the two-commit range a pull request gives it. Advisories already on master are
+  # reported by the release workflow's dependency-scan job instead.
+  dependency-review:
+    name: Dependency Review
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    permissions:
+      contents: read
+      # comment-summary-in-pr needs this. A fork PR gets a read-only token regardless, so there
+      # the comment is skipped with a warning and the finding is left to the job summary.
+      pull-requests: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Review dependency changes
+        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          fail-on-severity: high
+          comment-summary-in-pr: on-failure
+
   build:
+    name: Build & Validate
     runs-on: windows-latest
 
     steps:
     - name: Checkout code
       uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+    # 9.x builds both target frameworks; the net8.0 runtime is what lets tests targeting it run.
     - name: Setup .NET
       uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
       with:
-        dotnet-version: 9.x
+        dotnet-version: |
+          8.0.x
+          9.0.x
+
+    # Folder mode formats files directly without loading MSBuild projects — full `dotnet format`
+    # corrupts sources on multi-targeted projects by inserting per-TFM conflict markers
+    # (dotnet/format#1634).
+    - name: Verify .NET code formatting
+      run: dotnet format whitespace . --folder --verify-no-changes
 
     - name: Restore dependencies
       run: dotnet restore Infragistics.QueryBuilder.Executor.sln
 
     - name: Build solution
-      run: dotnet build Infragistics.QueryBuilder.Executor.sln --configuration Release --no-restore
+      run: dotnet build Infragistics.QueryBuilder.Executor.sln --configuration Release --no-restore -p:ContinuousIntegrationBuild=true
 
     - name: Pack solution - NuGet
-      run: dotnet pack Infragistics.QueryBuilder.Executor.sln --configuration Release --no-build  
+      run: dotnet pack Infragistics.QueryBuilder.Executor.sln --configuration Release --no-build
 
     - name: Run tests
       run: dotnet test Infragistics.QueryBuilder.Executor.sln --configuration Release --no-build --verbosity normal
